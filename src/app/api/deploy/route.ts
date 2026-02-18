@@ -24,11 +24,12 @@ export async function POST(req: NextRequest) {
     const webhookId = randomUUID();
 
     const systemPrompt = `You are ${name}.${socialUrl ? ` Social: ${socialUrl}.` : ""
-      }\n\n${description}\n\nFor every user prompt, use the Zynd Search tool to find relevant agents, then pick the best one and call it via the HTTP Request (x402) tool using its n8nHttpWebhookUrl.\n\nOur agent name is: {{ $workflow.name }} so don't select an agent with this name.`;
+      }\n\nHere is the exact description provided by the user:\n"${description}"\n\nFor every user prompt, use the Zynd Search tool to find relevant agents, then pick the best one and call it via the HTTP Request (x402) tool using its n8nHttpWebhookUrl.\n\nOur agent name is: {{ $workflow.name }} so don't select an agent with this name.`;
 
     // Step 1: Create the workflow with a fixed webhookId
     const workflowPayload = {
       name: agentName,
+      description: description,
       settings: {
         saveExecutionProgress: true,
         saveManualExecutions: true,
