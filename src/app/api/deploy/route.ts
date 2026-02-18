@@ -29,7 +29,6 @@ export async function POST(req: NextRequest) {
     // Step 1: Create the workflow with a fixed webhookId
     const workflowPayload = {
       name: agentName,
-      description: description,
       settings: {
         saveExecutionProgress: true,
         saveManualExecutions: true,
