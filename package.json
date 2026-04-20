@@ -12,7 +12,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "worker:dev": "tsx watch --env-file=.env worker/main.ts",
-    "worker:start": "node --env-file=.env --import tsx/esm worker/main.ts",
+    "worker:start": "tsx --env-file=.env worker/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

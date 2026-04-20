@@ -50,7 +50,7 @@ export async function addRoute(
   // Append to the configured zynd server's routes list. Caddy's
   // POST /config/<path> semantics: posting to a path that ends in `...`
   // appends to the list.
-  const res = await adminFetch("/config/apps/http/servers/zynd/routes/...", {
+  const res = await adminFetch(`/config/apps/http/servers/${config.caddyServerName}/routes/...`, {
     method: "POST",
     body: JSON.stringify(route),
   });

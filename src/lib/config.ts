@@ -30,6 +30,7 @@ export const config = {
   wildcardDomain: optional("DEPLOYER_WILDCARD_DOMAIN", "deployer.zynd.ai"),
   registryUrl: optional("ZYND_REGISTRY_URL", "https://dns01.zynd.ai"),
   caddyAdminUrl: optional("CADDY_ADMIN_URL", "http://127.0.0.1:2019"),
+  caddyServerName: optional("CADDY_SERVER_NAME", "srv0"),
   dockerSocket: optional("DOCKER_SOCKET", "/var/run/docker.sock"),
   ageIdentityPath: optional(
     "AGE_IDENTITY_PATH",
