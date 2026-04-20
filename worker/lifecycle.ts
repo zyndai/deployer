@@ -52,6 +52,8 @@ async function failDeployment(
     data: {
       status: "failed",
       errorMessage: msg.slice(0, 500),
+      port: null,
+      containerId: null,
     },
   });
   if (cleanup) await cleanup().catch(() => undefined);
