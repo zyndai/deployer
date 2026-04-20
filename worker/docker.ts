@@ -76,7 +76,6 @@ export async function runContainer(opts: RunOpts): Promise<string> {
       NanoCpus: 500_000_000, // 0.5 CPU
       ReadonlyRootfs: true,
       Tmpfs: { "/tmp": "rw,exec,size=64m" },
-      SecurityOpt: ["no-new-privileges"],
     },
     Labels: {
       "zynd.deployment": opts.deploymentId,
