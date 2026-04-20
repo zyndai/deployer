@@ -47,6 +47,8 @@ export const config = {
   portMin: numberEnv("DEPLOYER_PORT_MIN", 13000),
   portMax: numberEnv("DEPLOYER_PORT_MAX", 14000),
   maxActive: numberEnv("DEPLOYER_MAX_ACTIVE", 50),
+  containerMemoryMb: numberEnv("DEPLOYER_CONTAINER_MEM_MB", 1536),
+  containerCpuMillis: numberEnv("DEPLOYER_CONTAINER_CPU_MILLIS", 1000),
 
   // Local-dev escape hatches. Setting SKIP_CADDY=true lets the worker
   // mark a deployment `running` without calling the Caddy admin API —

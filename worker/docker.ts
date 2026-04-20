@@ -72,8 +72,8 @@ export async function runContainer(opts: RunOpts): Promise<string> {
         `${hostPath(opts.keyHostPath)}:/app/keypair.json:ro`,
       ],
       RestartPolicy: { Name: "unless-stopped" },
-      Memory: 512 * 1024 * 1024,
-      NanoCpus: 500_000_000, // 0.5 CPU
+      Memory: config.containerMemoryMb * 1024 * 1024,
+      NanoCpus: config.containerCpuMillis * 1_000_000,
       ReadonlyRootfs: true,
       Tmpfs: { "/tmp": "rw,exec,size=64m" },
     },
