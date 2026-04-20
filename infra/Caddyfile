@@ -1,0 +1,40 @@
+# zynd-deployer Caddy config.
+#
+# Two responsibilities:
+#   1. Serve the UI at deployer.zynd.ai -> Next.js on :3000.
+#   2. Provide a named HTTPS server ("zynd") with an empty routes[] that
+#      the worker populates at runtime via the admin API.
+#
+# TLS for *.deployer.zynd.ai relies on Cloudflare DNS-01. Set
+# CLOUDFLARE_API_TOKEN in the systemd EnvironmentFile before starting
+# caddy.service.
+
+{
+    admin 127.0.0.1:2019
+    # Dynamic routes get appended to apps.http.servers.zynd.routes via
+    # POST /config/apps/http/servers/zynd/routes/...
+    servers {
+        trusted_proxies static 127.0.0.1/32
+    }
+}
+
+# --- UI -------------------------------------------------------------------
+
+deployer.zynd.ai {
+    encode gzip
+    reverse_proxy 127.0.0.1:3000
+}
+
+# --- Wildcard tenant server ----------------------------------------------
+#
+# The magic here is the @id handle: Caddy only attaches IDs to matchers/
+# routes that carry them. We seed an empty placeholder route so the
+# `zynd` server exists before the worker starts POSTing to it.
+
+*.deployer.zynd.ai {
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+    # No default handler — unknown slugs 404 until the worker adds them.
+    respond 404
+}

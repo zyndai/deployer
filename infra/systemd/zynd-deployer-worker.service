@@ -1,0 +1,23 @@
+[Unit]
+Description=Zynd Deployer — background worker (docker + caddy)
+After=network.target postgresql.service docker.service
+Wants=postgresql.service docker.service
+
+[Service]
+Type=simple
+User=zynd
+Group=docker
+WorkingDirectory=/opt/zynd-deployer
+EnvironmentFile=/etc/zynd-deployer/worker.env
+ExecStart=/usr/bin/node --import tsx/esm worker/main.ts
+Restart=on-failure
+RestartSec=3
+
+NoNewPrivileges=true
+# Worker needs docker.sock, the data root, and postgres.
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/zynd-deployer /var/run/docker.sock
+
+[Install]
+WantedBy=multi-user.target

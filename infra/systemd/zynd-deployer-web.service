@@ -1,0 +1,23 @@
+[Unit]
+Description=Zynd Deployer — Next.js web
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=zynd
+Group=zynd
+WorkingDirectory=/opt/zynd-deployer
+EnvironmentFile=/etc/zynd-deployer/web.env
+ExecStart=/usr/bin/node .next/standalone/server.js
+Restart=on-failure
+RestartSec=2
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+# Development image for the web + worker services.
+#
+# Kept deliberately simple: node 20, age (for the crypto shell-out), and
+# nothing else. The repo itself is bind-mounted at /app by compose, so
+# source changes hot-reload without rebuilds.
+
+FROM node:20-bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      age \
+      openssl \
+      ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# We don't COPY the source in — compose bind-mounts it. package*.json
+# ship in via the mount too, but if node_modules ends up empty on first
+# boot, `npm install` inside the container populates the anonymous
+# volume declared in compose.yml.
+
+EXPOSE 3000

@@ -1,0 +1,44 @@
+# Base image for Zynd agents deployed via zynd-deployer.
+#
+# Pre-installs the fat "batteries included" set of agent frameworks so
+# cold-start stays under ~15s for the common case. User's requirements.txt
+# (if any) is installed at runtime via entrypoint.sh into a side path on
+# PYTHONPATH so the base layer stays cached across deployments.
+#
+# Rebuild manually whenever zyndai-agent or the framework pins move.
+#   docker build -f images/Dockerfile.agent-base -t zynd-deployer/agent-base:latest .
+
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+      zyndai-agent \
+      python-dotenv \
+      requests \
+      httpx \
+      langchain \
+      langchain-openai \
+      langchain-community \
+      langchain-classic \
+      langgraph \
+      crewai \
+      pydantic-ai
+
+WORKDIR /app
+
+# Container expects the worker to bind-mount the project at /app and
+# keypair.json at /app/keypair.json, and to set the ZYND_* env vars.
+EXPOSE 5000
+
+COPY images/entrypoint.sh /usr/local/bin/zynd-entrypoint
+RUN chmod +x /usr/local/bin/zynd-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/zynd-entrypoint"]
+CMD ["python", "/app/agent.py"]

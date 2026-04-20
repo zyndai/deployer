@@ -1,0 +1,31 @@
+node_modules/
+.next/
+out/
+.turbo/
+dist/
+build/
+
+# local env
+.env
+.env.local
+.env.*.local
+
+# prisma generated client
+src/generated/
+prisma/dev.db
+prisma/dev.db-journal
+
+# ops artifacts (should never end up in git)
+/var/
+*.age
+*.log
+
+# editor
+.vscode/
+.idea/
+.DS_Store
+
+# type-check cache
+*.tsbuildinfo
+
+.data

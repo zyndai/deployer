@@ -1,0 +1,86 @@
+// zynd-deployer — Prisma schema
+//
+// See PLAN.md §8 for field rationale.
+// There is no User model. Developer attribution is whatever the uploaded
+// keypair resolves to on the zynd-dns registry.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Deployment ----------------------------------------------------
+
+model Deployment {
+  id            String   @id @default(cuid())
+
+  // --- user-facing identifiers ---
+  name          String                          // from config.name
+  slug          String   @unique                // slugify(name) + short suffix
+  entityType    String                          // "agent" | "service"
+  entityId      String?                         // filled in after first successful start
+  registryUrl   String                          // snapshot at upload time
+
+  // --- lifecycle ---
+  status        String                          // queued | unpacking | writing_config |
+                                                // allocating_port | building | starting |
+                                                // health_checking | registering_route |
+                                                // running | failed | stopped | crashed
+  errorMessage  String?
+
+  // --- on-disk storage ---
+  blobPath      String                          // .../blobs/<id>.zip.age
+  keyPath       String                          // .../keys/<id>/keypair.json.age
+
+  // --- runtime ---
+  port          Int?     @unique                // host-side port bound to 127.0.0.1
+  containerId   String?
+  hostUrl       String?                         // https://<slug>.deployer.zynd.ai
+  publicKeyB64  String?                         // shown in UI, derived from keypair
+
+  // --- crash state ---
+  lastExitCode  Int?
+  lastCrashAt   DateTime?
+
+  // --- timestamps ---
+  createdAt     DateTime @default(now())
+  startedAt     DateTime?
+  stoppedAt     DateTime?
+
+  logs          DeploymentLog[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ---------- DeploymentLog -------------------------------------------------
+
+model DeploymentLog {
+  id           BigInt    @id @default(autoincrement())
+  deploymentId String
+  lineNo       Int                              // monotonic per-deployment
+  text         String    @db.Text
+  stream       String                           // "stdout" | "stderr" | "system"
+  ts           DateTime  @default(now())
+
+  deployment   Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  @@index([deploymentId, lineNo])
+  @@index([deploymentId, ts])
+}
+
+// ---------- PortAllocation ------------------------------------------------
+//
+// Unique constraint on Deployment.port already prevents double-booking,
+// but this table gives the allocator a cheap "is taken?" read without
+// having to scan all deployments and also survives soft-deletes.
+
+model PortAllocation {
+  port         Int      @id
+  deploymentId String   @unique
+  takenAt      DateTime @default(now())
+}

@@ -1,0 +1,103 @@
+# Local-dev stack. One command brings everything up:
+#   docker compose up --build
+#
+# Notes on the dual "data root" env vars:
+#   DEPLOYER_DATA_ROOT = the path the worker process writes to, inside
+#       its own container (here: /data)
+#   HOST_DATA_ROOT     = the path the Docker daemon sees on the host
+#       (here: whatever ${PWD}/.data resolves to). The worker uses this
+#       when constructing bind-mount specs for the user's deployment
+#       containers, which the daemon spawns as siblings via the mounted
+#       docker.sock.
+#
+# The master age key lives at ./master.age on the host and is mounted
+# read-only into both services at /app/master.age.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # Pin platform so Docker Desktop on Apple Silicon doesn't fall back
+    # to amd64 under Rosetta. Mismatched native binaries (Next's SWC,
+    # Prisma's query engine) cause SIGBUS under emulation.
+    platform: linux/arm64
+    environment:
+      POSTGRES_USER: zynd
+      POSTGRES_PASSWORD: zynd
+      POSTGRES_DB: zynd_deployer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zynd -d zynd_deployer"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # web:
+  #   platform: linux/arm64
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   # db push syncs the Prisma schema to Postgres without needing
+  #   # committed migration files — the right choice for local dev.
+  #   # Switch to `prisma migrate deploy` once we have a real migrations/
+  #   # folder in prod.
+  #   command: sh -c "npm install && npx prisma generate && npx prisma db push --accept-data-loss && npm run dev"
+  #   environment:
+  #     DATABASE_URL: postgresql://zynd:zynd@postgres:5432/zynd_deployer?schema=public
+  #     AGE_IDENTITY_PATH: /app/master.age
+  #     DEPLOYER_DATA_ROOT: /data
+  #     # HOST_DATA_ROOT is *also* needed by the web process because the
+  #     # upload POST writes blobs that the worker will hand to the
+  #     # docker daemon. Keeping both in sync is easier than splitting.
+  #     HOST_DATA_ROOT: ${PWD}/.data
+  #     DEPLOYER_WILDCARD_DOMAIN: localhost
+  #     DEPLOYER_SKIP_CADDY: "true"
+  #     ZYND_REGISTRY_URL: https://dns01.zynd.ai
+  #     AGENT_BASE_IMAGE: zynd-deployer/agent-base:latest
+  #     SERVICE_BASE_IMAGE: zynd-deployer/service-base:latest
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - .:/app
+  #     - web-node-modules:/app/node_modules
+  #     - ./.data:/data
+  #     - ./master.age:/app/master.age:ro
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+  # worker:
+  #   platform: linux/arm64
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   command: sh -c "npm install && npx prisma generate && npm run worker:dev"
+  #   environment:
+  #     DATABASE_URL: postgresql://zynd:zynd@postgres:5432/zynd_deployer?schema=public
+  #     AGE_IDENTITY_PATH: /app/master.age
+  #     DEPLOYER_DATA_ROOT: /data
+  #     HOST_DATA_ROOT: ${PWD}/.data
+  #     DEPLOYER_WILDCARD_DOMAIN: localhost
+  #     DEPLOYER_SKIP_CADDY: "true"
+  #     ZYND_REGISTRY_URL: https://dns01.zynd.ai
+  #     DOCKER_SOCKET: /var/run/docker.sock
+  #     AGENT_BASE_IMAGE: zynd-deployer/agent-base:latest
+  #     SERVICE_BASE_IMAGE: zynd-deployer/service-base:latest
+  #   volumes:
+  #     - .:/app
+  #     - worker-node-modules:/app/node_modules
+  #     - ./.data:/data
+  #     - ./master.age:/app/master.age:ro
+  #     # Give the worker the host's Docker daemon so it can spawn sibling
+  #     # containers for user deployments.
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
+volumes:
+  postgres-data:
+  web-node-modules:
+  worker-node-modules:
