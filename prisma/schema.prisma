@@ -37,7 +37,7 @@ model Deployment {
   keyPath       String                          // .../keys/<id>/keypair.json.age
 
   // --- runtime ---
-  port          Int?     @unique                // host-side port bound to 127.0.0.1
+  port          Int?                             // host-side port bound to 127.0.0.1 (non-unique; PortAllocation is source of truth)
   containerId   String?
   hostUrl       String?                         // https://<slug>.deployer.zynd.ai
   publicKeyB64  String?                         // shown in UI, derived from keypair
@@ -75,9 +75,9 @@ model DeploymentLog {
 
 // ---------- PortAllocation ------------------------------------------------
 //
-// Unique constraint on Deployment.port already prevents double-booking,
-// but this table gives the allocator a cheap "is taken?" read without
-// having to scan all deployments and also survives soft-deletes.
+// Source of truth for port uniqueness. A row here means the port is
+// reserved; Deployment.port is a non-unique display mirror that can lag
+// behind (e.g. stays set on a crashed deployment for debugging).
 
 model PortAllocation {
   port         Int      @id
