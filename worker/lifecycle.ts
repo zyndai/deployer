@@ -35,6 +35,7 @@ function buildHostUrl(slug: string, port: number): string {
 }
 
 async function setStatus(id: string, status: DeploymentStatus, patch: Record<string, unknown> = {}) {
+  console.log(`[lifecycle] ${id} → ${status}`);
   await prisma.deployment.update({
     where: { id },
     data: { status, ...patch },
@@ -46,6 +47,7 @@ async function failDeployment(
   msg: string,
   cleanup?: () => Promise<void>
 ): Promise<void> {
+  console.error(`[lifecycle] ${id} FAILED: ${msg}`);
   await appendSystemLog(id, `[FAILED] ${msg}`).catch(() => undefined);
   await prisma.deployment.update({
     where: { id },
@@ -148,7 +150,12 @@ export async function drive(deploymentId: string): Promise<void> {
     // --- 5. health check ---------------------------------------------
 
     await setStatus(deploymentId, "health_checking");
+    const hcStart = Date.now();
     const healthy = await waitForHealth(`http://127.0.0.1:${port}/health`);
+    console.log(
+      `[lifecycle] ${deploymentId} health check ${healthy ? "passed" : "failed"} ` +
+        `in ${Date.now() - hcStart}ms on port ${port}`
+    );
     if (!healthy) {
       throw new Error(`Container did not become healthy within ${HEALTH_ATTEMPTS * HEALTH_INTERVAL_MS}ms`);
     }
