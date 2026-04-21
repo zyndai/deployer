@@ -19,10 +19,16 @@ async function adminFetch(
   path: string,
   init?: RequestInit
 ): Promise<Response> {
+  // Caddy's admin API rejects requests whose Origin header isn't on
+  // the configured allowlist. Node's fetch doesn't set Origin by
+  // default, so the server sees origin '' and returns 403. Pin it to
+  // the admin URL itself, which matches Caddy's default loopback
+  // allowlist (127.0.0.1, localhost, ::1).
   const res = await fetch(`${config.caddyAdminUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      Origin: config.caddyAdminUrl,
       ...(init?.headers ?? {}),
     },
   });
