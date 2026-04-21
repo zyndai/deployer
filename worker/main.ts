@@ -37,14 +37,26 @@ async function drainQueue(): Promise<void> {
     where: { id: candidate.id, status: "queued" },
     data: { status: "unpacking" },
   });
-  if (claimed.count === 0) return;
+  if (claimed.count === 0) {
+    console.log(`[worker] lost race to claim ${candidate.id}, retrying`);
+    return;
+  }
+
+  console.log(`[worker] claimed deployment=${candidate.id}, driving`);
+  const t0 = Date.now();
 
   // Drive in the foreground. We don't fire and forget because we want
   // serial execution per worker — PLAN.md calls for one VM for v1.
   try {
     await drive(candidate.id);
+    console.log(
+      `[worker] drive(${candidate.id}) finished in ${Date.now() - t0}ms`
+    );
   } catch (e) {
-    console.error(`[worker] drive(${candidate.id}) threw:`, e);
+    console.error(
+      `[worker] drive(${candidate.id}) threw after ${Date.now() - t0}ms:`,
+      e
+    );
   }
 }
 
@@ -57,8 +69,15 @@ async function drainStops(): Promise<void> {
     select: { id: true, containerId: true },
   });
 
+  if (stopped.length > 0) {
+    console.log(`[worker] draining ${stopped.length} stopped deployment(s)`);
+  }
+
   for (const row of stopped) {
     try {
+      console.log(
+        `[worker] cleaning up stopped deployment=${row.id} container=${row.containerId?.slice(0, 12)}`
+      );
       stopTailer(row.id);
       if (row.containerId) await stopAndRemove(row.containerId);
       await removeRoute(row.id);
