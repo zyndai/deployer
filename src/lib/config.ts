@@ -57,6 +57,15 @@ export const config = {
   // at 127.0.0.1:<port> directly.
   skipCaddy: (process.env.DEPLOYER_SKIP_CADDY ?? "").toLowerCase() === "true",
 
+  // Keep crashed container corpses around instead of sweeping them
+  // immediately. Useful for debugging OOM kills and other exit=137
+  // mysteries — you can `docker inspect` / `docker logs` the dead
+  // container afterwards. The port is still released so new deploys
+  // can proceed. Sweep manually with `docker rm $(docker ps -a -q
+  // --filter label=zynd.deployment --filter status=exited)`.
+  keepCrashedContainers:
+    (process.env.DEPLOYER_KEEP_CRASHED_CONTAINERS ?? "").toLowerCase() === "true",
+
   // Path the *host's* Docker daemon sees for the deployer's data root.
   // When the worker itself runs in a container (docker-compose dev
   // setup), any path we hand to the daemon for a bind-mount needs to

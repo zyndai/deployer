@@ -10,6 +10,7 @@ import {
   tailLogs,
 } from "./docker";
 import { prisma } from "@/lib/db";
+import { config } from "@/lib/config";
 import { appendSystemLog, stopTailer } from "./logs";
 import { releasePort } from "./ports";
 
@@ -116,16 +117,36 @@ export async function watchCrashes(): Promise<void> {
         const header = oomKilled
           ? `[CRASH exit=${exitCode ?? "?"} OOMKilled=true memLimit=${state?.memoryLimitMb ?? "?"}MB]`
           : `[CRASH exit=${exitCode ?? "?"}]`;
-        await appendSystemLog(deploymentId, `${header}\n${tail.slice(-2000)}`);
+        const stateSummary = state
+          ? `\n[state] oomKilled=${state.oomKilled} memLimit=${state.memoryLimitMb ?? "?"}MB ` +
+            `dockerErr=${state.error || "(none)"} ` +
+            `startedAt=${state.startedAt} finishedAt=${state.finishedAt}`
+          : "";
+        await appendSystemLog(
+          deploymentId,
+          `${header}${stateSummary}\n${tail.slice(-2000)}`
+        );
         stopTailer(deploymentId);
 
-        // Sweep the dead container + free its port. Logs are already
-        // persisted in DeploymentLog, so the user still sees the last
-        // ~200 lines on the /d/<id> page after this runs.
-        await stopAndRemove(containerId).catch((err) => {
-          console.error(`[crash watcher] sweep ${containerId} failed:`, err);
-        });
+        // Free the port regardless — otherwise a follow-up deploy for the
+        // same slug can't reuse it.
         await releasePort(deploymentId).catch(() => undefined);
+
+        // Sweeping the corpse is opt-out: when debugging OOMs or other
+        // exit=137 mysteries, keeping the dead container lets the operator
+        // `docker inspect` / `docker logs` after the fact. The logs we
+        // already wrote to DB only cover the tail; a full log dump via
+        // `docker logs` can still be useful.
+        if (config.keepCrashedContainers) {
+          console.log(
+            `[crash watcher] keeping container ${containerId.slice(0, 12)} for post-mortem ` +
+              `(DEPLOYER_KEEP_CRASHED_CONTAINERS=true); sweep manually when done`
+          );
+        } else {
+          await stopAndRemove(containerId).catch((err) => {
+            console.error(`[crash watcher] sweep ${containerId} failed:`, err);
+          });
+        }
       } catch (e) {
         console.warn("[crash watcher] malformed event:", (e as Error).message);
       }
