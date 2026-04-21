@@ -54,6 +54,13 @@ export async function runContainer(opts: RunOpts): Promise<string> {
     env.push(trimmed);
   }
 
+  console.log(
+    `[docker] createContainer deployment=${opts.deploymentId} image=${image} ` +
+      `kind=${opts.entityType} hostPort=${opts.hostPort} ` +
+      `mem=${config.containerMemoryMb}MB cpuMillis=${config.containerCpuMillis} ` +
+      `envVars=${env.length}`
+  );
+
   const container = await docker.createContainer({
     name: `zynd-${opts.deploymentId}`,
     Image: image,
@@ -84,6 +91,9 @@ export async function runContainer(opts: RunOpts): Promise<string> {
   });
 
   await container.start();
+  console.log(
+    `[docker] started deployment=${opts.deploymentId} container=${container.id.slice(0, 12)}`
+  );
   return container.id;
 }
 
@@ -106,6 +116,35 @@ export async function inspectExitCode(containerId: string): Promise<number | nul
     const info = await docker.getContainer(containerId).inspect();
     return info.State.ExitCode ?? null;
   } catch {
+    return null;
+  }
+}
+
+export interface ContainerTerminalState {
+  exitCode: number | null;
+  oomKilled: boolean;
+  error: string;
+  startedAt: string;
+  finishedAt: string;
+  memoryLimitMb: number | null;
+}
+
+export async function inspectTerminalState(
+  containerId: string
+): Promise<ContainerTerminalState | null> {
+  try {
+    const info = await docker.getContainer(containerId).inspect();
+    const mem = info.HostConfig?.Memory ?? 0;
+    return {
+      exitCode: info.State.ExitCode ?? null,
+      oomKilled: Boolean(info.State.OOMKilled),
+      error: info.State.Error ?? "",
+      startedAt: info.State.StartedAt ?? "",
+      finishedAt: info.State.FinishedAt ?? "",
+      memoryLimitMb: mem ? Math.round(mem / 1024 / 1024) : null,
+    };
+  } catch (e) {
+    console.error(`[docker] inspectTerminalState ${containerId.slice(0, 12)} failed:`, e);
     return null;
   }
 }
