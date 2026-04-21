@@ -74,21 +74,60 @@ async function drainStops(): Promise<void> {
   }
 
   for (const row of stopped) {
+    console.log(
+      `[worker] cleaning up stopped deployment=${row.id} container=${row.containerId?.slice(0, 12)}`
+    );
+    stopTailer(row.id);
+
+    // Run each external step independently so one failure doesn't
+    // block the others and trap the row in drainStops forever.
+    const errors: string[] = [];
+    if (row.containerId) {
+      try {
+        await stopAndRemove(row.containerId);
+      } catch (e) {
+        errors.push(`stopAndRemove: ${(e as Error).message}`);
+      }
+    }
     try {
-      console.log(
-        `[worker] cleaning up stopped deployment=${row.id} container=${row.containerId?.slice(0, 12)}`
-      );
-      stopTailer(row.id);
-      if (row.containerId) await stopAndRemove(row.containerId);
       await removeRoute(row.id);
+    } catch (e) {
+      errors.push(`removeRoute: ${(e as Error).message}`);
+    }
+    try {
       await releasePort(row.id);
+    } catch (e) {
+      errors.push(`releasePort: ${(e as Error).message}`);
+    }
+
+    // Always clear containerId/port so the drainStops query stops
+    // selecting this row. If external cleanup genuinely leaked a
+    // container or route, the operator needs to see it once and fix
+    // it — better than a wedged worker emitting the same 403 every
+    // second.
+    try {
       await prisma.deployment.update({
         where: { id: row.id },
         data: { containerId: null, port: null },
       });
-      await appendSystemLog(row.id, "[worker] cleaned up on stop");
     } catch (e) {
-      console.error(`[worker] stop cleanup ${row.id} failed:`, e);
+      console.error(
+        `[worker] could not clear containerId for ${row.id} — will retry next tick:`,
+        e
+      );
+      continue;
+    }
+
+    if (errors.length === 0) {
+      await appendSystemLog(row.id, "[worker] cleaned up on stop");
+    } else {
+      console.error(
+        `[worker] stop cleanup ${row.id} had ${errors.length} error(s), row cleared anyway: ${errors.join("; ")}`
+      );
+      await appendSystemLog(
+        row.id,
+        `[worker] cleaned up with errors: ${errors.join("; ")}`
+      ).catch(() => undefined);
     }
   }
 }
