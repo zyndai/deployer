@@ -16,7 +16,7 @@ import { prisma } from "@/lib/db";
 import { drive } from "./lifecycle";
 import { watchCrashes } from "./crash";
 import { stopAndRemove } from "./docker";
-import { removeRoute } from "./caddy";
+import { ensureServer, removeRoute } from "./caddy";
 import { releasePort } from "./ports";
 import { appendSystemLog, stopTailer, startTailer } from "./logs";
 import { startRetentionLoop } from "./retention";
@@ -153,6 +153,13 @@ async function resumeTailers(): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("[worker] starting");
+  // Bootstrap Caddy once on startup so the first addRoute doesn't
+  // 500 on "final element is not an array". Non-fatal: if Caddy is
+  // genuinely offline we'd rather keep the worker alive so the
+  // lifecycle surfaces a clean FAILED message per deploy.
+  await ensureServer().catch((e) =>
+    console.error("[worker] ensureServer failed at startup:", e)
+  );
   await resumeTailers();
   watchCrashes().catch((e) => console.error("[worker] crash watcher died:", e));
   startRetentionLoop();
