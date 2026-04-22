@@ -5,15 +5,16 @@
   "description": "Host user-uploaded Zynd agents and services on a single VM with stable HTTPS URLs.",
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 3000",
     "lint": "next lint",
+    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "prisma:migrate:dev": "prisma migrate dev",
     "worker:dev": "tsx watch --env-file=.env worker/main.ts",
     "worker:start": "tsx --env-file=.env worker/main.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "prisma generate && tsc --noEmit"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
