@@ -191,13 +191,16 @@ async function prependRoute(route: CaddyRoute): Promise<void> {
   const deduped = current.filter((r) => r["@id"] !== route["@id"]);
   const next = [route, ...deduped];
 
+  // PATCH replaces the existing value at the path. PUT errors with
+  // 409 "key already exists" when the array is already present,
+  // which is every case except a brand-new server.
   const res = await adminFetch(path, {
-    method: "PUT",
+    method: "PATCH",
     body: JSON.stringify(next),
   });
   if (!res.ok) {
     throw new Error(
-      `Caddy addRoute failed: PUT ${path} returned ${res.status} ${await res.text()}`
+      `Caddy addRoute failed: PATCH ${path} returned ${res.status} ${await res.text()}`
     );
   }
   console.log(
