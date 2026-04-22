@@ -50,58 +50,88 @@ async function adminFetch(
 export async function ensureServer(): Promise<void> {
   if (config.skipCaddy) return;
 
-  // Probe the server first. 200 with a JSON body containing "routes":[…]
-  // means we're already set up. 404 means the server doesn't exist at
-  // all. Anything else we try to fix by writing the whole server block.
+  // Probe first — if the server already has a routes array we're
+  // done. We also accept a server that's there but with a missing
+  // routes key (Caddy accepts that shape but the append endpoint
+  // rejects it).
   const probe = await adminFetch(
     `/config/apps/http/servers/${config.caddyServerName}`,
     { method: "GET" }
   );
   if (probe.ok) {
-    const body = (await probe.json()) as { routes?: unknown };
-    if (Array.isArray(body.routes)) return;
+    try {
+      const body = (await probe.json()) as { routes?: unknown };
+      if (Array.isArray(body.routes)) {
+        return;
+      }
+    } catch {
+      // probe returned 200 but not JSON — fall through and rewrite
+    }
   }
 
-  // Write a minimal server with the right listen + an empty routes
-  // array so the append endpoint works. Uses PUT on the server key so
-  // we replace the whole sub-tree atomically rather than patching
-  // field-by-field and racing with another caller.
-  const serverBody = {
-    listen: [":443"],
-    routes: [] as unknown[],
-  };
-  const ensured = await adminFetch(
-    `/config/apps/http/servers/${config.caddyServerName}`,
-    {
-      method: "PUT",
-      body: JSON.stringify(serverBody),
-    }
-  );
-  if (!ensured.ok) {
-    // The server key doesn't exist yet — push a whole apps.http.servers
-    // object with our server inside. Covers the fresh-Caddy case.
-    const full = {
-      apps: {
-        http: {
-          servers: {
-            [config.caddyServerName]: serverBody,
-          },
-        },
-      },
-    };
-    const load = await adminFetch(`/load`, {
-      method: "POST",
-      body: JSON.stringify(full),
-    });
-    if (!load.ok) {
-      throw new Error(
-        `Caddy ensureServer failed: PUT=${ensured.status} LOAD=${load.status} ` +
-          `${await load.text()}`
-      );
+  // Push the whole apps.http.servers.<name> sub-tree via POST /load.
+  // Using /load (replaces full config) is more reliable than PUTing a
+  // leaf path: on a freshly-booted Caddy the intermediate /apps/http
+  // keys don't exist, and PUT to a missing parent returns 4xx. /load
+  // is the documented way to bootstrap from an empty config.
+  //
+  // We fetch the existing config first so we don't blow away any
+  // other apps the operator has configured (e.g. the admin listen
+  // override in /etc/caddy/caddy.json).
+  const currentRes = await adminFetch(`/config/`, { method: "GET" });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let current: any = {};
+  if (currentRes.ok) {
+    try {
+      current = await currentRes.json();
+    } catch {
+      current = {};
     }
   }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const merged: any = { ...(current ?? {}) };
+  merged.apps = { ...(merged.apps ?? {}) };
+  merged.apps.http = { ...(merged.apps.http ?? {}) };
+  merged.apps.http.servers = { ...(merged.apps.http.servers ?? {}) };
+  const existing = merged.apps.http.servers[config.caddyServerName] ?? {};
+  merged.apps.http.servers[config.caddyServerName] = {
+    listen: Array.isArray(existing.listen) && existing.listen.length > 0
+      ? existing.listen
+      : [":443"],
+    ...existing,
+    routes: Array.isArray(existing.routes) ? existing.routes : [],
+  };
+
+  const load = await adminFetch(`/load`, {
+    method: "POST",
+    body: JSON.stringify(merged),
+  });
+  if (!load.ok) {
+    const text = await load.text();
+    throw new Error(
+      `Caddy ensureServer failed: POST /load returned ${load.status} ${text}`
+    );
+  }
+
+  // Re-probe to confirm the shape is right before we let addRoute run.
+  const verify = await adminFetch(
+    `/config/apps/http/servers/${config.caddyServerName}`,
+    { method: "GET" }
+  );
+  if (!verify.ok) {
+    throw new Error(
+      `Caddy ensureServer: post-load probe returned ${verify.status}`
+    );
+  }
+  const verifyBody = (await verify.json()) as { routes?: unknown };
+  if (!Array.isArray(verifyBody.routes)) {
+    throw new Error(
+      `Caddy ensureServer: server "${config.caddyServerName}" has routes=${typeof verifyBody.routes} after /load — expected array`
+    );
+  }
   console.log(
-    `[caddy] ensured server="${config.caddyServerName}" with empty routes[]`
+    `[caddy] ensured server="${config.caddyServerName}" with empty routes[] ` +
+      `(merged into ${Object.keys(merged.apps.http.servers).length} server(s))`
   );
 }
 
