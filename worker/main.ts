@@ -20,6 +20,7 @@ import { removeRoute } from "./caddy";
 import { releasePort } from "./ports";
 import { appendSystemLog, stopTailer, startTailer } from "./logs";
 import { startRetentionLoop } from "./retention";
+import { startMetricsLoop } from "./metrics";
 
 const TICK_MS = 1000;
 
@@ -154,6 +155,7 @@ async function main(): Promise<void> {
   await resumeTailers();
   watchCrashes().catch((e) => console.error("[worker] crash watcher died:", e));
   startRetentionLoop();
+  startMetricsLoop();
 
   // Graceful shutdown so systemd sees a clean exit.
   const shutdown = () => {

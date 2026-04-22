@@ -57,8 +57,21 @@ export async function pruneOldLogs(): Promise<void> {
     sysDeleted = await pruneStream("system", cutoff);
   }
 
+  let metricsDeleted = 0;
+  if (config.metricRetentionDays > 0) {
+    const cutoff = new Date(now - config.metricRetentionDays * 86_400_000);
+    // Separate table — one unconditional delete, no per-batch cap needed
+    // since DeploymentMetric is smaller and the query is covered by the
+    // sampledAt index.
+    const res = await prisma.deploymentMetric.deleteMany({
+      where: { sampledAt: { lt: cutoff } },
+    });
+    metricsDeleted = res.count;
+  }
+
   console.log(
-    `[retention] pruned ${lineDeleted} stdout/stderr + ${sysDeleted} system log rows in ${Date.now() - started}ms`
+    `[retention] pruned ${lineDeleted} stdout/stderr + ${sysDeleted} system log rows ` +
+      `+ ${metricsDeleted} metric rows in ${Date.now() - started}ms`
   );
 }
 

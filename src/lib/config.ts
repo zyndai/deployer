@@ -57,9 +57,14 @@ export const config = {
   // deployment. Set either to 0 to disable pruning.
   logRetentionDays: numberEnv("DEPLOYER_LOG_RETENTION_DAYS", 7),
   systemLogRetentionDays: numberEnv("DEPLOYER_SYSTEM_LOG_RETENTION_DAYS", 30),
+  metricRetentionDays: numberEnv("DEPLOYER_METRIC_RETENTION_DAYS", 3),
   // How often the retention loop runs (in minutes). One run scans
   // and deletes in batches of 10k so we don't lock the table.
   retentionIntervalMinutes: numberEnv("DEPLOYER_RETENTION_INTERVAL_MIN", 60),
+
+  // CPU / memory sampler for running containers. 30s gives ~17k
+  // rows per deployment per week at the default 3-day retention.
+  metricsIntervalSeconds: numberEnv("DEPLOYER_METRICS_INTERVAL_SEC", 30),
 
   // Local-dev escape hatches. Setting SKIP_CADDY=true lets the worker
   // mark a deployment `running` without calling the Caddy admin API —

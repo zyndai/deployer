@@ -73,6 +73,25 @@ model DeploymentLog {
   @@index([deploymentId, ts])
 }
 
+// ---------- DeploymentMetric ----------------------------------------------
+//
+// Per-container CPU and memory samples captured by worker/metrics.ts on
+// a fixed interval. Retention is enforced by worker/retention.ts using
+// DEPLOYER_METRIC_RETENTION_DAYS (default 3) — metrics accumulate fast
+// (one row per deployment per sample) and are only useful recent.
+
+model DeploymentMetric {
+  id           BigInt    @id @default(autoincrement())
+  deploymentId String
+  sampledAt    DateTime  @default(now())
+  memUsedMb    Int                               // cgroup memory.usage_in_bytes / 1MB
+  memLimitMb   Int                               // cgroup memory.limit_in_bytes / 1MB
+  cpuPct       Float                             // 0..1 (fraction of one logical CPU)
+
+  @@index([deploymentId, sampledAt])
+  @@index([sampledAt])
+}
+
 // ---------- PortAllocation ------------------------------------------------
 //
 // Source of truth for port uniqueness. A row here means the port is
