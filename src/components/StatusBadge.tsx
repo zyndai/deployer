@@ -10,6 +10,7 @@ const STYLES: Record<DeploymentStatus, string> = {
   health_checking: "bg-amber-500/20 text-amber-200",
   registering_route: "bg-amber-500/20 text-amber-200",
   running: "bg-emerald-500/20 text-emerald-300",
+  unhealthy: "bg-amber-500/30 text-amber-200",
   failed: "bg-rose-500/20 text-rose-300",
   stopped: "bg-white/10 text-white/60",
   crashed: "bg-rose-500/30 text-rose-200",
