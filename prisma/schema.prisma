@@ -29,7 +29,7 @@ model Deployment {
   status        String                          // queued | unpacking | writing_config |
                                                 // allocating_port | building | starting |
                                                 // health_checking | registering_route |
-                                                // running | failed | stopped | crashed
+                                                // running | unhealthy | failed | stopped | crashed
   errorMessage  String?
 
   // --- on-disk storage ---

@@ -66,6 +66,15 @@ export const config = {
   // rows per deployment per week at the default 3-day retention.
   metricsIntervalSeconds: numberEnv("DEPLOYER_METRICS_INTERVAL_SEC", 30),
 
+  // Periodic /health probe for running containers. Catches hangs
+  // where the process is alive (and therefore invisible to the crash
+  // watcher) but no longer serving requests. Three consecutive
+  // failures move the deployment from `running` to `unhealthy` and
+  // append a [UNHEALTHY] line to the system log.
+  healthProbeIntervalSeconds: numberEnv("DEPLOYER_HEALTH_INTERVAL_SEC", 60),
+  healthProbeTimeoutMs: numberEnv("DEPLOYER_HEALTH_TIMEOUT_MS", 2000),
+  healthProbeFailThreshold: numberEnv("DEPLOYER_HEALTH_FAIL_THRESHOLD", 3),
+
   // Local-dev escape hatches. Setting SKIP_CADDY=true lets the worker
   // mark a deployment `running` without calling the Caddy admin API —
   // useful when you don't have Caddy running on your laptop. The UI

@@ -12,12 +12,14 @@ export type DeploymentStatus =
   | "health_checking"
   | "registering_route"
   | "running"
+  | "unhealthy"
   | "failed"
   | "stopped"
   | "crashed";
 
 export const TERMINAL_STATUSES: DeploymentStatus[] = [
   "running",
+  "unhealthy",
   "failed",
   "stopped",
   "crashed",
@@ -33,6 +35,7 @@ export const ACTIVE_STATUSES: DeploymentStatus[] = [
   "health_checking",
   "registering_route",
   "running",
+  "unhealthy",
 ];
 
 export interface Keypair {
