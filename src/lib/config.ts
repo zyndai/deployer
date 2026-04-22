@@ -50,6 +50,17 @@ export const config = {
   containerMemoryMb: numberEnv("DEPLOYER_CONTAINER_MEM_MB", 1536),
   containerCpuMillis: numberEnv("DEPLOYER_CONTAINER_CPU_MILLIS", 1000),
 
+  // How long to keep per-line container logs in DeploymentLog before
+  // the retention loop deletes them. System lines (the [CRASH] /
+  // [FAILED] summaries the crash watcher writes) are kept longer so
+  // the UI can still show a useful post-mortem on a 2-week-old dead
+  // deployment. Set either to 0 to disable pruning.
+  logRetentionDays: numberEnv("DEPLOYER_LOG_RETENTION_DAYS", 7),
+  systemLogRetentionDays: numberEnv("DEPLOYER_SYSTEM_LOG_RETENTION_DAYS", 30),
+  // How often the retention loop runs (in minutes). One run scans
+  // and deletes in batches of 10k so we don't lock the table.
+  retentionIntervalMinutes: numberEnv("DEPLOYER_RETENTION_INTERVAL_MIN", 60),
+
   // Local-dev escape hatches. Setting SKIP_CADDY=true lets the worker
   // mark a deployment `running` without calling the Caddy admin API —
   // useful when you don't have Caddy running on your laptop. The UI
