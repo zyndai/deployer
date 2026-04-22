@@ -153,47 +153,56 @@ export async function addRoute(
     ],
   };
 
-  // Insert the new route at the HEAD of the routes list, not the
-  // tail. Operators commonly put a terminal wildcard route last to
-  // 404 "unknown tenant" traffic — an appended tenant-specific
-  // route would land below the wildcard and never match. Caddy's
-  // admin API takes POST /config/<path>/<index> as "insert before
-  // index", and POST /config/<path>/0 prepends.
+  // Insert at the HEAD of the routes list. Operators put a terminal
+  // wildcard "unknown tenant" 404 route last — appending ours lands
+  // it below the wildcard and Caddy's first-match-wins evaluation
+  // never reaches it.
   //
-  // There's no risk of two tenant routes colliding on the same host
-  // because slugs are globally unique; first-match semantics still
-  // do the right thing.
-  let res = await adminFetch(
-    `/config/apps/http/servers/${config.caddyServerName}/routes/0`,
-    { method: "POST", body: JSON.stringify(route) }
-  );
+  // We avoid POST .../routes/0 because its semantics differ across
+  // Caddy versions — some treat the trailing index as "insert at",
+  // others as "append to array named 0". Instead: fetch the current
+  // routes, unshift our entry, PUT the whole array back. This is
+  // atomic from Caddy's view (a single config mutation) and works
+  // identically everywhere.
+  await prependRoute(route);
+}
 
-  // If the routes list doesn't exist yet, bootstrap the server and
-  // retry once. This keeps first-deploy-after-Caddy-restart working
-  // without a manual curl against /load.
-  if (!res.ok && res.status === 500) {
-    const text = await res.text();
-    if (
-      text.includes("final element is not an array") ||
-      text.includes("unknown object")
-    ) {
-      console.warn(
-        `[caddy] routes array missing on server="${config.caddyServerName}", bootstrapping`
-      );
-      await ensureServer();
-      res = await adminFetch(
-        `/config/apps/http/servers/${config.caddyServerName}/routes/0`,
-        { method: "POST", body: JSON.stringify(route) }
-      );
-    } else {
-      throw new Error(`Caddy addRoute failed: ${res.status} ${text}`);
-    }
+async function prependRoute(route: CaddyRoute): Promise<void> {
+  const path = `/config/apps/http/servers/${config.caddyServerName}/routes`;
+
+  const readCurrent = async (): Promise<CaddyRoute[]> => {
+    const r = await adminFetch(path, { method: "GET" });
+    if (!r.ok) return [];
+    const body = (await r.json()) as unknown;
+    return Array.isArray(body) ? (body as CaddyRoute[]) : [];
+  };
+
+  let current = await readCurrent();
+  if (current.length === 0) {
+    // Might be empty or the server itself might be missing — try to
+    // bootstrap and re-read.
+    await ensureServer();
+    current = await readCurrent();
   }
+
+  // Drop any existing entry with the same @id so redeploys don't
+  // accumulate duplicates. addRoute is also called after a stop/
+  // restart cycle.
+  const deduped = current.filter((r) => r["@id"] !== route["@id"]);
+  const next = [route, ...deduped];
+
+  const res = await adminFetch(path, {
+    method: "PUT",
+    body: JSON.stringify(next),
+  });
   if (!res.ok) {
     throw new Error(
-      `Caddy addRoute failed: ${res.status} ${await res.text()}`
+      `Caddy addRoute failed: PUT ${path} returned ${res.status} ${await res.text()}`
     );
   }
+  console.log(
+    `[caddy] prepended route id=${route["@id"]} host=${route.match[0].host[0]} (routes=${next.length})`
+  );
 }
 
 export async function removeRoute(deploymentId: string): Promise<void> {
