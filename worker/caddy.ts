@@ -153,26 +153,36 @@ export async function addRoute(
     ],
   };
 
-  // Append to the configured zynd server's routes list. Caddy's
-  // POST /config/<path> semantics: posting to a path that ends in `...`
-  // appends to the list.
-  let res = await adminFetch(`/config/apps/http/servers/${config.caddyServerName}/routes/...`, {
-    method: "POST",
-    body: JSON.stringify(route),
-  });
+  // Insert the new route at the HEAD of the routes list, not the
+  // tail. Operators commonly put a terminal wildcard route last to
+  // 404 "unknown tenant" traffic — an appended tenant-specific
+  // route would land below the wildcard and never match. Caddy's
+  // admin API takes POST /config/<path>/<index> as "insert before
+  // index", and POST /config/<path>/0 prepends.
+  //
+  // There's no risk of two tenant routes colliding on the same host
+  // because slugs are globally unique; first-match semantics still
+  // do the right thing.
+  let res = await adminFetch(
+    `/config/apps/http/servers/${config.caddyServerName}/routes/0`,
+    { method: "POST", body: JSON.stringify(route) }
+  );
 
   // If the routes list doesn't exist yet, bootstrap the server and
   // retry once. This keeps first-deploy-after-Caddy-restart working
   // without a manual curl against /load.
   if (!res.ok && res.status === 500) {
     const text = await res.text();
-    if (text.includes("final element is not an array")) {
+    if (
+      text.includes("final element is not an array") ||
+      text.includes("unknown object")
+    ) {
       console.warn(
         `[caddy] routes array missing on server="${config.caddyServerName}", bootstrapping`
       );
       await ensureServer();
       res = await adminFetch(
-        `/config/apps/http/servers/${config.caddyServerName}/routes/...`,
+        `/config/apps/http/servers/${config.caddyServerName}/routes/0`,
         { method: "POST", body: JSON.stringify(route) }
       );
     } else {
