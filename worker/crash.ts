@@ -42,8 +42,16 @@ export async function watchCrashes(): Promise<void> {
         const action = ev.Action ?? ev.status;
         if (!action) continue;
 
-        // Only care about terminal events.
-        if (action !== "die" && action !== "oom" && action !== "kill") continue;
+        // Only `die` is the definitive terminal signal — the container
+        // has actually exited and has a stable exit code. `kill` fires
+        // for every signal *sent* to the container, so acting on it
+        // here creates a loop: we call stopAndRemove → docker sends
+        // SIGTERM → emits `kill` → we handle it → call stopAndRemove
+        // again → another SIGTERM → another `kill` → …
+        //
+        // We still treat `oom` as an explicit OOM notification, but
+        // the real state transition happens on `die`.
+        if (action !== "die" && action !== "oom") continue;
 
         const labels = ev.Actor?.Attributes ?? {};
         const deploymentId = labels["zynd.deployment"];
@@ -80,10 +88,17 @@ export async function watchCrashes(): Promise<void> {
           continue;
         }
 
-        // Ignore events for deployments the operator explicitly stopped.
-        if (current.status === "stopped") {
+        // Skip if the deployment is already in a terminal state. This
+        // prevents us from reprocessing the same container (e.g. when
+        // docker emits `oom` *and* `die` for the same exit) and from
+        // re-sweeping a container we already tore down.
+        if (
+          current.status === "stopped" ||
+          current.status === "crashed" ||
+          current.status === "failed"
+        ) {
           console.log(
-            `[crash watcher] deployment ${deploymentId} already stopped, ignoring ${action}`
+            `[crash watcher] deployment ${deploymentId} already ${current.status}, ignoring ${action}`
           );
           continue;
         }
