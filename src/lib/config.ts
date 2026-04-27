@@ -50,6 +50,14 @@ export const config = {
   containerMemoryMb: numberEnv("DEPLOYER_CONTAINER_MEM_MB", 1536),
   containerCpuMillis: numberEnv("DEPLOYER_CONTAINER_CPU_MILLIS", 1000),
 
+  // How long to wait for a freshly started container's /health to
+  // return 200 before declaring the deployment FAILED. JS deploys run
+  // `npm ci` in their entrypoint (writing into the /tmp tmpfs) before
+  // the user code can bind a port — that alone can take 30–60s on
+  // a cold cache. Default is 120s.
+  bootHealthTimeoutMs: numberEnv("DEPLOYER_BOOT_HEALTH_TIMEOUT_MS", 120_000),
+  bootHealthIntervalMs: numberEnv("DEPLOYER_BOOT_HEALTH_INTERVAL_MS", 500),
+
   // Size of the writable /tmp tmpfs mounted into each deployment
   // container. The container rootfs is read-only (see worker/docker.ts)
   // so this is also where npm/pip caches and the user's installed

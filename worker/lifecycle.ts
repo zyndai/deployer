@@ -20,8 +20,11 @@ import { runContainer, stopAndRemove } from "./docker";
 import { addRoute, removeRoute } from "./caddy";
 import { appendSystemLog, startTailer } from "./logs";
 
-const HEALTH_ATTEMPTS = 30;
-const HEALTH_INTERVAL_MS = 500;
+const HEALTH_INTERVAL_MS = Math.max(50, config.bootHealthIntervalMs);
+const HEALTH_ATTEMPTS = Math.max(
+  1,
+  Math.ceil(config.bootHealthTimeoutMs / HEALTH_INTERVAL_MS)
+);
 
 /**
  * Look up the worker-side runtime adapter for a deployment row.
