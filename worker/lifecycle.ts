@@ -192,6 +192,13 @@ export async function drive(deploymentId: string): Promise<void> {
       },
     });
     await appendSystemLog(deploymentId, `[worker] live at ${hostUrl}`);
+
+    // Best-effort: pull entityId from the agent's well-known descriptor.
+    // The agent owns this — the deployer doesn't know the registry id
+    // until the agent itself reports it. Failures are non-fatal.
+    backfillEntityId(deploymentId, port).catch((e) =>
+      console.warn(`[lifecycle] entityId backfill error: ${(e as Error).message}`)
+    );
   } catch (e) {
     await failDeployment(deploymentId, (e as Error).message, cleanup);
   }
@@ -260,6 +267,52 @@ async function writeRenderedConfig(
   }
 
   void deploymentId;
+}
+
+async function backfillEntityId(deploymentId: string, port: number): Promise<void> {
+  const url = `http://127.0.0.1:${port}/.well-known/agent.json`;
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+  } catch (e) {
+    console.log(
+      `[lifecycle] ${deploymentId} entityId backfill skipped: ${(e as Error).message}`
+    );
+    return;
+  }
+  if (!res.ok) {
+    console.log(
+      `[lifecycle] ${deploymentId} entityId backfill skipped: HTTP ${res.status}`
+    );
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    return;
+  }
+  const entityId = extractEntityId(body);
+  if (!entityId) return;
+
+  await prisma.deployment.update({
+    where: { id: deploymentId },
+    data: { entityId },
+  });
+  await appendSystemLog(deploymentId, `[worker] entityId=${entityId}`).catch(
+    () => undefined
+  );
+}
+
+function extractEntityId(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const obj = body as Record<string, unknown>;
+  for (const key of ["entity_id", "entityId", "id"]) {
+    const v = obj[key];
+    if (typeof v === "string" && v.length > 0) return v;
+  }
+  return null;
 }
 
 async function waitForHealth(url: string): Promise<boolean> {

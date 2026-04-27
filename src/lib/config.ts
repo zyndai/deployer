@@ -91,6 +91,12 @@ export const config = {
   keepCrashedContainers:
     (process.env.DEPLOYER_KEEP_CRASHED_CONTAINERS ?? "").toLowerCase() === "true",
 
+  // Public WebSocket log-tail port served by the worker. Clients
+  // connect to wss://<deployer-host>:<port>/v1/agents/<entityId>/logs.
+  // 0 disables the WS server (the SSE route on the Next app remains
+  // available either way).
+  wsLogsPort: numberEnv("DEPLOYER_WS_LOGS_PORT", 7071),
+
   // Path the *host's* Docker daemon sees for the deployer's data root.
   // When the worker itself runs in a container (docker-compose dev
   // setup), any path we hand to the daemon for a bind-mount needs to

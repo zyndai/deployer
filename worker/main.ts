@@ -22,6 +22,7 @@ import { appendSystemLog, stopTailer, startTailer } from "./logs";
 import { startRetentionLoop } from "./retention";
 import { startMetricsLoop } from "./metrics";
 import { startHealthLoop } from "./health";
+import { startWsLogServer } from "./wsLogs";
 
 const TICK_MS = 1000;
 
@@ -165,6 +166,7 @@ async function main(): Promise<void> {
   startRetentionLoop();
   startMetricsLoop();
   startHealthLoop();
+  startWsLogServer();
 
   // Graceful shutdown so systemd sees a clean exit.
   const shutdown = () => {

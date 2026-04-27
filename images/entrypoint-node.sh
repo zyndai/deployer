@@ -13,6 +13,14 @@ set -euo pipefail
 
 EXTRA_DIR="/tmp/user-modules"
 
+# Rootfs is read-only (worker/docker.ts: ReadonlyRootfs=true). npm defaults
+# to /root/.npm for cache and /root/.npm/_logs for logs — both unwritable.
+# Redirect both under /tmp (the only rw tmpfs).
+export npm_config_cache="/tmp/.npm-cache"
+export npm_config_logs_dir="/tmp/.npm-logs"
+export npm_config_update_notifier=false
+mkdir -p "$npm_config_cache" "$npm_config_logs_dir"
+
 if [[ -f /app/package-lock.json ]]; then
   mkdir -p "$EXTRA_DIR"
   cp /app/package.json /app/package-lock.json "$EXTRA_DIR"/
