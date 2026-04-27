@@ -50,6 +50,14 @@ export const config = {
   containerMemoryMb: numberEnv("DEPLOYER_CONTAINER_MEM_MB", 1536),
   containerCpuMillis: numberEnv("DEPLOYER_CONTAINER_CPU_MILLIS", 1000),
 
+  // Size of the writable /tmp tmpfs mounted into each deployment
+  // container. The container rootfs is read-only (see worker/docker.ts)
+  // so this is also where npm/pip caches and the user's installed
+  // node_modules live. node_modules for a typical TS agent runs
+  // 150–400MB, so 512MB is a safer default than the original 64MB.
+  // Counts against the container's memory limit.
+  containerTmpfsMb: numberEnv("DEPLOYER_CONTAINER_TMPFS_MB", 512),
+
   // How long to keep per-line container logs in DeploymentLog before
   // the retention loop deletes them. System lines (the [CRASH] /
   // [FAILED] summaries the crash watcher writes) are kept longer so

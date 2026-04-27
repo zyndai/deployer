@@ -93,7 +93,7 @@ export async function runContainer(opts: RunOpts): Promise<string> {
       Memory: config.containerMemoryMb * 1024 * 1024,
       NanoCpus: config.containerCpuMillis * 1_000_000,
       ReadonlyRootfs: true,
-      Tmpfs: { "/tmp": "rw,exec,size=64m" },
+      Tmpfs: { "/tmp": `rw,exec,size=${config.containerTmpfsMb}m` },
     },
     Labels: {
       "zynd.deployment": opts.deploymentId,
