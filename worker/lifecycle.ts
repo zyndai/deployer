@@ -11,7 +11,9 @@ import { prisma } from "@/lib/db";
 import { decryptFile, decryptToFile } from "@/lib/crypto";
 import { config, paths } from "@/lib/config";
 import { ACTIVE_STATUSES } from "@/lib/types";
-import type { DeploymentStatus, EntityType } from "@/lib/types";
+import type { DeploymentStatus, EntityType, Runtime } from "@/lib/types";
+import { pythonWorkerRuntime } from "./runtimes/python";
+import { nodeWorkerRuntime } from "./runtimes/node";
 
 import { allocatePort, releasePort } from "./ports";
 import { runContainer, stopAndRemove } from "./docker";
@@ -20,6 +22,15 @@ import { appendSystemLog, startTailer } from "./logs";
 
 const HEALTH_ATTEMPTS = 30;
 const HEALTH_INTERVAL_MS = 500;
+
+/**
+ * Look up the worker-side runtime adapter for a deployment row.
+ * Falls back to python so existing rows without the column still work.
+ */
+function workerRuntime(runtime: string) {
+  if ((runtime as Runtime) === "node") return nodeWorkerRuntime;
+  return pythonWorkerRuntime;
+}
 
 /**
  * The URL the agent/service should advertise to the registry and the
@@ -126,13 +137,17 @@ export async function drive(deploymentId: string): Promise<void> {
     // --- 4. start container (we skip explicit build in v1) -----------
 
     await setStatus(deploymentId, "starting");
+    const rt = workerRuntime(dep.runtime ?? "python");
+    const entityType = dep.entityType as EntityType;
     containerId = await runContainer({
       deploymentId,
       workdir,
       keyHostPath: keyWorkPath,
-      entityType: dep.entityType as EntityType,
+      entityType,
       hostPort: port,
       envFilePath: envRenderedPath,
+      image: rt.baseImage(entityType),
+      cmd: rt.startCmd(entityType),
     });
     await prisma.deployment.update({
       where: { id: deploymentId },

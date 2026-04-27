@@ -7,11 +7,12 @@
 
 import JSZip from "jszip";
 
-import type { EntityType, Keypair, ProjectConfig } from "./types";
+import type { EntityType, Keypair, ProjectConfig, Runtime } from "./types";
+import { detectRuntime } from "./detect";
+import { RUNTIMES } from "./runtime";
 
 export const MAX_ZIP_BYTES = 50 * 1024 * 1024; // 50MB
 const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024; // 200MB
-const MAX_REQUIREMENTS_LINES = 200;
 
 // A few file/path fragments that should never appear in an upload. The
 // developer key is a hard reject; the other names are there so we catch
@@ -31,10 +32,11 @@ const FORBIDDEN_ENV_KEYS = [
 
 export interface ValidationResult {
   entityType: EntityType;
+  runtime: Runtime;
   config: ProjectConfig;
   keypair: Keypair;
   envText: string | null;                  // original .env file contents (may be null)
-  requirementsText: string | null;         // original requirements.txt (may be null)
+  requirementsText: string | null;         // original requirements.txt (may be null; only for python)
   projectFiles: Map<string, Uint8Array>;   // relative path -> bytes, stripped of forbidden entries
 }
 
@@ -176,12 +178,15 @@ export async function validateUpload(
 
   const entityType: EntityType = hasAgentConfig ? "agent" : "service";
   const configFile = hasAgentConfig ? "agent.config.json" : "service.config.json";
-  const scriptFile = hasAgentConfig ? "agent.py" : "service.py";
 
-  if (!projectFiles.has(scriptFile)) {
-    throw new Error(`project.zip must contain ${scriptFile} at the root`);
-  }
+  // --- Detect runtime (language) ----------------------------------------
+  const runtime = detectRuntime(projectFiles);
+  const runtimeSpec = RUNTIMES[runtime];
 
+  // --- Runtime-specific deep validation ---------------------------------
+  await runtimeSpec.validate({ files: projectFiles, entityType });
+
+  // --- Parse config JSON ------------------------------------------------
   let config: ProjectConfig;
   try {
     config = JSON.parse(
@@ -201,24 +206,18 @@ export async function validateUpload(
     sanityCheckEnv(envText);
   }
 
-  // requirements.txt is optional; cap line count.
+  // requirements.txt is only relevant for Python — the per-runtime
+  // validate() already enforces line-count limits.
   let requirementsText: string | null = null;
-  if (projectFiles.has("requirements.txt")) {
+  if (runtime === "python" && projectFiles.has("requirements.txt")) {
     requirementsText = Buffer.from(
       projectFiles.get("requirements.txt")!
     ).toString("utf8");
-    const nonEmpty = requirementsText
-      .split(/\r?\n/)
-      .filter((l) => l.trim() && !l.trim().startsWith("#"));
-    if (nonEmpty.length > MAX_REQUIREMENTS_LINES) {
-      throw new Error(
-        `requirements.txt has ${nonEmpty.length} dependency lines, max is ${MAX_REQUIREMENTS_LINES}`
-      );
-    }
   }
 
   return {
     entityType,
+    runtime,
     config,
     keypair,
     envText,

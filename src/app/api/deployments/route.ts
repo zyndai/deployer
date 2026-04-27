@@ -147,13 +147,14 @@ export async function POST(req: Request) {
         name: parsed.config.name,
         slug,
         entityType: parsed.entityType,
+        runtime: parsed.runtime,
         registryUrl: config.registryUrl,
         status: "queued",
         blobPath,
         keyPath,
         publicKeyB64: parsed.keypair.public_key,
       },
-      select: { id: true, slug: true, status: true },
+      select: { id: true, slug: true, status: true, runtime: true },
     });
 
     return NextResponse.json(dep, { status: 201 });

@@ -1,0 +1,45 @@
+# Base image for Zynd JS/TS agents deployed via zynd-deployer.
+#
+# Slice 1: pre-installs only the minimal set (zyndai, dotenv, zod, tsx).
+# LangChain.js / Mastra / Vercel AI are deferred to Slice 2 to keep the
+# image small and the first build fast.
+#
+# User's package.json (if any) is installed at container start into
+# /tmp/user-modules by entrypoint-node.sh; NODE_PATH chains both locations
+# so `import "zyndai"` resolves to the user's pinned copy if they shipped one.
+#
+#   docker build -f images/Dockerfile.node-agent-base -t zynd-deployer/node-agent-base:latest .
+
+FROM node:22-slim
+
+ENV NODE_ENV=production
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Pre-install the Slice 1 minimal set into a side-loadable path so the
+# base layer stays cached across deploys. Installed here, not in /app,
+# because /app is bind-mounted read-only by the worker.
+RUN mkdir -p /opt/zynd-base \
+ && cd /opt/zynd-base \
+ && npm init -y >/dev/null \
+ && npm install --omit=dev --no-audit --no-fund \
+      zyndai \
+      dotenv \
+      zod \
+      tsx
+
+ENV NODE_PATH=/opt/zynd-base/node_modules
+
+WORKDIR /app
+
+# Container expects the worker to bind-mount the project at /app and
+# keypair.json at /app/keypair.json, and to set the ZYND_* env vars.
+EXPOSE 5000
+
+COPY images/entrypoint-node.sh /usr/local/bin/zynd-entrypoint
+RUN chmod +x /usr/local/bin/zynd-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/zynd-entrypoint"]
+CMD ["node", "/opt/zynd-base/node_modules/.bin/tsx", "/app/agent.ts"]

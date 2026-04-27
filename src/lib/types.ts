@@ -2,6 +2,8 @@
 
 export type EntityType = "agent" | "service";
 
+export type Runtime = "python" | "node";
+
 export type DeploymentStatus =
   | "queued"
   | "unpacking"
@@ -65,6 +67,7 @@ export interface UploadResult {
   id: string;
   slug: string;
   status: DeploymentStatus;
+  runtime: Runtime;
 }
 
 export interface LogLine {

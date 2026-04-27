@@ -31,6 +31,10 @@ export interface RunOpts {
   entityType: "agent" | "service";
   hostPort: number;            // 127.0.0.1:<hostPort>:5000
   envFilePath: string;         // /var/lib/zynd-deployer/work/<id>/.env.rendered
+  /** Runtime-supplied base image. Defaults to entity-type python images for backwards compat. */
+  image?: string;
+  /** Runtime-supplied start command. Defaults to python /app/<entity>.py for backwards compat. */
+  cmd?: string[];
 }
 
 /**
@@ -39,10 +43,20 @@ export interface RunOpts {
  * + releasing the port) if downstream steps fail.
  */
 export async function runContainer(opts: RunOpts): Promise<string> {
+  // Use caller-supplied image/cmd if provided (Runtime strategy); fall back
+  // to the legacy Python defaults so any call-sites that don't yet pass them
+  // continue to work unchanged.
   const image =
-    opts.entityType === "service"
+    opts.image ??
+    (opts.entityType === "service"
       ? config.serviceBaseImage
-      : config.agentBaseImage;
+      : config.agentBaseImage);
+
+  const cmd =
+    opts.cmd ??
+    (opts.entityType === "service"
+      ? ["python", "/app/service.py"]
+      : ["python", "/app/agent.py"]);
 
   // We rely on --env-file semantics via Env[] — dockerode takes an array
   // of "K=V" lines, so we read the rendered .env and pass it through.
@@ -64,10 +78,7 @@ export async function runContainer(opts: RunOpts): Promise<string> {
   const container = await docker.createContainer({
     name: `zynd-${opts.deploymentId}`,
     Image: image,
-    Cmd:
-      opts.entityType === "service"
-        ? ["python", "/app/service.py"]
-        : ["python", "/app/agent.py"],
+    Cmd: cmd,
     Env: env,
     ExposedPorts: { "5000/tcp": {} },
     HostConfig: {

@@ -5,15 +5,29 @@ import { useRouter } from "next/navigation";
 import JSZip from "jszip";
 
 import { DropZone } from "./DropZone";
+import type { Runtime } from "@/lib/types";
 
 type EntityType = "agent" | "service";
 
-export function DeployCard({ entityType }: { entityType: EntityType }) {
+export function DeployCard({
+  entityType,
+  runtime,
+}: {
+  entityType: EntityType;
+  runtime: Runtime;
+}) {
   const router = useRouter();
   const [projectFiles, setProjectFiles] = useState<Map<string, File> | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // The canonical entry filename displayed in hints depends on both
+  // the entity type and the chosen runtime.
+  const entryFilename =
+    runtime === "node" ? `${entityType}.ts` : `${entityType}.py`;
+  const manifestFilename =
+    runtime === "node" ? "package.json" : "requirements.txt";
 
   const projectSummary = useMemo(() => {
     if (!projectFiles) return undefined;
@@ -41,10 +55,10 @@ export function DeployCard({ entityType }: { entityType: EntityType }) {
       const zip = new JSZip();
 
       // Figure out whether there's a single top-level wrapper folder.
-      const paths = Array.from(projectFiles.keys());
-      const tops = new Set(paths.map((p) => p.split("/")[0]));
+      const filePaths = Array.from(projectFiles.keys());
+      const tops = new Set(filePaths.map((p) => p.split("/")[0]));
       const strip =
-        tops.size === 1 && paths.every((p) => p.includes("/"))
+        tops.size === 1 && filePaths.every((p) => p.includes("/"))
           ? `${Array.from(tops)[0]}/`
           : "";
 
@@ -59,6 +73,9 @@ export function DeployCard({ entityType }: { entityType: EntityType }) {
       const form = new FormData();
       form.set("project.zip", zipBlob, "project.zip");
       form.set("keypair.json", keyFile, "keypair.json");
+      // Pass the client-side toggle as a hint. The server re-validates and
+      // uses the detected runtime from the upload contents as source of truth.
+      form.set("runtime", runtime);
 
       const res = await fetch("/api/deployments", {
         method: "POST",
@@ -83,12 +100,19 @@ export function DeployCard({ entityType }: { entityType: EntityType }) {
       <h2 className="text-lg font-semibold">{title}</h2>
       <p className="mt-1 text-xs text-white/50">
         Drop your Zynd {entityType} project folder (contains{" "}
-        <code className="text-white/70">
-          {entityType}.config.json
-        </code>{" "}
-        and{" "}
-        <code className="text-white/70">{entityType}.py</code>) and its{" "}
-        <code className="text-white/70">keypair.json</code>.
+        <code className="text-white/70">{entityType}.config.json</code> and{" "}
+        <code className="text-white/70">{entryFilename}</code>
+        {manifestFilename === "package.json" ? (
+          <>
+            {" "}and <code className="text-white/70">package.json</code>
+          </>
+        ) : null}
+        ) and its <code className="text-white/70">keypair.json</code>.
+        {runtime === "node" && (
+          <span className="ml-1 text-white/40">
+            Do not include <code>node_modules/</code>.
+          </span>
+        )}
       </p>
 
       <div className="mt-5 space-y-4">

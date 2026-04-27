@@ -36,6 +36,9 @@ model Deployment {
   blobPath      String                          // .../blobs/<id>.zip.age
   keyPath       String                          // .../keys/<id>/keypair.json.age
 
+  // --- language runtime ---
+  runtime       String   @default("python")      // "python" | "node"
+
   // --- runtime ---
   port          Int?                             // host-side port bound to 127.0.0.1 (non-unique; PortAllocation is source of truth)
   containerId   String?
