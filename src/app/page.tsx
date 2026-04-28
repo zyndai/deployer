@@ -1,10 +1,11 @@
 import Link from "next/link";
 
+import { DashboardStats } from "@/components/DashboardStats";
 import { DeploymentList } from "@/components/DeploymentList";
 
 export default function HomePage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Deployments</h1>
@@ -19,6 +20,7 @@ export default function HomePage() {
           + New deployment
         </Link>
       </div>
+      <DashboardStats />
       <DeploymentList />
     </div>
   );
