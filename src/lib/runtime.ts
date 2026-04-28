@@ -6,6 +6,7 @@
 // in the generic lifecycle / docker modules.
 
 import type { EntityType, Runtime as RuntimeId } from "./types";
+import { findUnresolvedImports } from "./pythonImports";
 
 // Per-validation context handed to Runtime.validate.
 export interface ValidationCtx {
@@ -70,9 +71,9 @@ const pythonRuntime: RuntimeSpec = {
     if (!files.has(scriptFile)) {
       throw new Error(`project.zip must contain ${scriptFile} at the root`);
     }
-    // requirements.txt line-count cap (mirrors the rule that was inline
-    // in validator.ts before the Runtime abstraction).
-    if (files.has("requirements.txt")) {
+
+    const hasRequirements = files.has("requirements.txt");
+    if (hasRequirements) {
       const text = Buffer.from(files.get("requirements.txt")!).toString("utf8");
       const nonEmpty = text
         .split(/\r?\n/)
@@ -83,6 +84,25 @@ const pythonRuntime: RuntimeSpec = {
         );
       }
     }
+
+    // If the project imports anything outside stdlib + the base image's
+    // pre-installed set + its own local files, the user must ship a
+    // requirements.txt. Distribution-name vs import-name (python-dotenv
+    // -> dotenv, pyyaml -> yaml, ...) is too messy to validate
+    // line-by-line, so we only check for presence and let pip do the
+    // real work at container start. False positives here just ask the
+    // user for a requirements.txt they may not strictly need — cheap.
+    if (!hasRequirements) {
+      const { unresolved } = findUnresolvedImports(files);
+      if (unresolved.size > 0) {
+        const list = Array.from(unresolved).sort().join(", ");
+        throw new Error(
+          `Project imports modules not in the base image: ${list}. ` +
+          `Add a requirements.txt at the project root listing the packages you need.`
+        );
+      }
+    }
+
     return { ok: true };
   },
 
