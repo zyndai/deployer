@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import JSZip from "jszip";
 
 import { DropZone } from "./DropZone";
+import { ImagePicker } from "./ImagePicker";
 import type { Runtime } from "@/lib/types";
 
 type EntityType = "agent" | "service";
@@ -19,6 +20,9 @@ export function DeployCard({
   const router = useRouter();
   const [projectFiles, setProjectFiles] = useState<Map<string, File> | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
+  // Operator-built image ref the user picked. Null = let the worker
+  // choose the per-runtime default (back-compat with the old flow).
+  const [imageRef, setImageRef] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,6 +80,7 @@ export function DeployCard({
       // Pass the client-side toggle as a hint. The server re-validates and
       // uses the detected runtime from the upload contents as source of truth.
       form.set("runtime", runtime);
+      if (imageRef) form.set("image", imageRef);
 
       const res = await fetch("/api/deployments", {
         method: "POST",
@@ -132,6 +137,12 @@ export function DeployCard({
             if (arr.length > 0) setKeyFile(arr[0]);
           }}
           selectedSummary={keySummary}
+        />
+        <ImagePicker
+          runtime={runtime}
+          entityType={entityType}
+          value={imageRef}
+          onChange={setImageRef}
         />
       </div>
 

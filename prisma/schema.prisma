@@ -39,6 +39,14 @@ model Deployment {
   // --- language runtime ---
   runtime       String   @default("python")      // "python" | "node"
 
+  // --- container image ---
+  // Operator-built flavor image the user picked at deploy time
+  // (e.g. "zynd-deployer/agent-playwright:latest"). Null = fall back
+  // to the per-runtime base image resolved by the worker. Image must
+  // carry zynd.runtime / zynd.kind / zynd.flavor labels — see
+  // images/Dockerfile.*-base for the schema.
+  image         String?
+
   // --- runtime ---
   port          Int?                             // host-side port bound to 127.0.0.1 (non-unique; PortAllocation is source of truth)
   containerId   String?

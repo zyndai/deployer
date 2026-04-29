@@ -6,6 +6,12 @@
 
 FROM python:3.12-slim
 
+LABEL zynd.runtime="python" \
+      zynd.kind="service" \
+      zynd.flavor="base" \
+      zynd.display="Python Service (base)" \
+      zynd.description="FastAPI + zyndai-agent. Slim, no agent frameworks"
+
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1

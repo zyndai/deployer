@@ -12,6 +12,12 @@
 
 FROM node:22-slim
 
+LABEL zynd.runtime="node" \
+      zynd.kind="agent" \
+      zynd.flavor="base" \
+      zynd.display="Node.js Agent (base)" \
+      zynd.description="zyndai + tsx + zod + dotenv. No LangChain.js / Mastra yet"
+
 ENV NODE_ENV=production
 
 RUN apt-get update \

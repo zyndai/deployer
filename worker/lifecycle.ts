@@ -142,6 +142,9 @@ export async function drive(deploymentId: string): Promise<void> {
     await setStatus(deploymentId, "starting");
     const rt = workerRuntime(dep.runtime ?? "python");
     const entityType = dep.entityType as EntityType;
+    // User-picked image (operator-built flavor like agent-playwright)
+    // wins over the per-runtime default. Null falls back to the base.
+    const image = dep.image ?? rt.baseImage(entityType);
     containerId = await runContainer({
       deploymentId,
       workdir,
@@ -149,9 +152,10 @@ export async function drive(deploymentId: string): Promise<void> {
       entityType,
       hostPort: port,
       envFilePath: envRenderedPath,
-      image: rt.baseImage(entityType),
+      image,
       cmd: rt.startCmd(entityType),
     });
+    await appendSystemLog(deploymentId, `[worker] using image ${image}`);
     await prisma.deployment.update({
       where: { id: deploymentId },
       data: { port, containerId, startedAt: new Date() },

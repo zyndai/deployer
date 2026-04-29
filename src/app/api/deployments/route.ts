@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { prisma } from "@/lib/db";
 import { encryptToFile } from "@/lib/crypto";
 import { validateUpload } from "@/lib/validator";
+import { findZyndImage } from "@/lib/images";
 import { uniqueSlug } from "@/lib/slug";
 import { config, paths } from "@/lib/config";
 import { ACTIVE_STATUSES } from "@/lib/types";
@@ -31,6 +32,7 @@ export async function GET() {
       hostUrl: true,
       port: true,
       publicKeyB64: true,
+      image: true,
       lastExitCode: true,
       lastCrashAt: true,
       createdAt: true,
@@ -84,6 +86,39 @@ export async function POST(req: Request) {
       { error: (e as Error).message },
       { status: 400 }
     );
+  }
+
+  // --- Resolve + validate chosen image --------------------------------
+  //
+  // The image picker is optional — if the client doesn't send one, the
+  // worker falls back to the per-runtime base image. If it does, the
+  // image must (a) exist on the daemon, (b) carry zynd.* labels, and
+  // (c) match the runtime + entityType detected from the upload itself.
+  // Otherwise we'd happily run a Python project on a Node base image.
+  const imageRefRaw = form.get("image");
+  let chosenImage: string | null = null;
+  if (typeof imageRefRaw === "string" && imageRefRaw.trim().length > 0) {
+    const ref = imageRefRaw.trim();
+    const img = await findZyndImage(ref);
+    if (!img) {
+      return NextResponse.json(
+        {
+          error: `Image "${ref}" not found on the deployer host or is not Zynd-labelled. Pick one from the list.`,
+        },
+        { status: 400 }
+      );
+    }
+    if (img.runtime !== parsed.runtime || img.kind !== parsed.entityType) {
+      return NextResponse.json(
+        {
+          error:
+            `Image "${ref}" targets ${img.runtime}/${img.kind} but the upload is ` +
+            `${parsed.runtime}/${parsed.entityType}. Pick a matching image.`,
+        },
+        { status: 400 }
+      );
+    }
+    chosenImage = ref;
   }
 
   // --- Enforce soft cap on concurrent deployments ---------------------
@@ -148,13 +183,14 @@ export async function POST(req: Request) {
         slug,
         entityType: parsed.entityType,
         runtime: parsed.runtime,
+        image: chosenImage,
         registryUrl: config.registryUrl,
         status: "queued",
         blobPath,
         keyPath,
         publicKeyB64: parsed.keypair.public_key,
       },
-      select: { id: true, slug: true, status: true, runtime: true },
+      select: { id: true, slug: true, status: true, runtime: true, image: true },
     });
 
     return NextResponse.json(dep, { status: 201 });
