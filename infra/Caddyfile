@@ -1,50 +1,33 @@
 # zynd-deployer Caddy config.
 #
-# Two responsibilities:
-#   1. Serve the UI at deployer.zynd.ai -> Next.js on :3000.
-#   2. Provide a named HTTPS server ("zynd") with an empty routes[] that
-#      the worker populates at runtime via the admin API.
+# Single-host, path-based routing. One LE cert for deployer.zynd.ai
+# covers everything — no wildcard, no per-tenant cert, no weekly
+# rate-limit risk.
 #
-# TLS strategy: per-tenant on-demand TLS via HTTP-01.
+# Layout:
+#   deployer.zynd.ai/                       -> Next.js UI on :3000 (this file)
+#   deployer.zynd.ai/agent/<slug>/...       -> container, prefix stripped (worker)
+#   deployer.zynd.ai/service/<slug>/...     -> container, prefix stripped (worker)
 #
-# We don't use DNS-01 because the domain is on Namecheap (no Caddy DNS
-# module + no public API for free tier). Instead Caddy issues a fresh
-# Let's Encrypt cert for each <slug>.deployer.zynd.ai the first time
-# someone hits it. The "ask" hook below points at the Next API which
-# returns 200 only for slugs that actually exist as deployments — that
-# stops randoms from burning our LE rate limit on wildcard typos.
+# The worker prepends per-deployment routes (path matchers) into the
+# admin API at boot time. Because the worker prepends, its routes
+# always evaluate before the catch-all reverse_proxy below — so a
+# request like /agent/foo/health hits the container, while /, /docs,
+# /deploy etc. fall through to Next.
 #
 # Requirements:
-#   - DNS: A record  *.deployer.zynd.ai -> host IP   (already in place)
-#   - Firewall: port 80 (HTTP-01) and port 443 must be reachable
-#   - Caddy: stock build is fine; no DNS plugins needed
+#   - DNS:      A record  deployer.zynd.ai -> host IP
+#   - Firewall: ports 80 (HTTP-01 challenge + auto HTTP->HTTPS) and 443
+#   - Caddy:    stock build is fine; no DNS plugins needed
 
 {
     admin 127.0.0.1:2019
-    on_demand_tls {
-        ask http://127.0.0.1:3000/api/caddy/ask
-    }
     servers {
         trusted_proxies static 127.0.0.1/32
     }
 }
 
-# --- UI -------------------------------------------------------------------
-
 deployer.zynd.ai {
     encode gzip
     reverse_proxy 127.0.0.1:3000
-}
-
-# --- Wildcard tenant server ----------------------------------------------
-#
-# Empty placeholder route so the `zynd` server exists before the worker
-# starts POSTing. The worker prepends per-deployment routes via the
-# admin API; this block stays as a 404 fallback.
-
-*.deployer.zynd.ai {
-    tls {
-        on_demand
-    }
-    respond 404
 }

@@ -8,11 +8,15 @@ import { config } from "@/lib/config";
 
 interface CaddyRoute {
   "@id": string;
-  match: Array<{ host: string[] }>;
-  handle: Array<{
-    handler: "reverse_proxy";
-    upstreams: Array<{ dial: string }>;
-  }>;
+  match: Array<{ host?: string[]; path?: string[] }>;
+  // Two-stage handler: rewrite strips the path prefix so the upstream
+  // (which serves at root) sees the request as if it came in directly,
+  // then reverse_proxy forwards it. Order matters — rewrite must run
+  // before reverse_proxy.
+  handle: Array<
+    | { handler: "rewrite"; strip_path_prefix: string }
+    | { handler: "reverse_proxy"; upstreams: Array<{ dial: string }> }
+  >;
 }
 
 async function adminFetch(
@@ -138,14 +142,21 @@ export async function ensureServer(): Promise<void> {
 export async function addRoute(
   deploymentId: string,
   slug: string,
-  hostPort: number
+  hostPort: number,
+  entityType: "agent" | "service"
 ): Promise<void> {
   if (config.skipCaddy) return;
-  const host = `${slug}.${config.wildcardDomain}`;
+  const host = config.wildcardDomain;
+  const prefix = `/${entityType}/${slug}`;
+  // Match both the prefix exactly (so /agent/abc with no trailing
+  // slash still routes) and any subpath under it. Caddy's path
+  // matcher treats `/agent/abc/*` as "anything under /agent/abc/",
+  // which excludes the bare /agent/abc.
   const route: CaddyRoute = {
     "@id": deploymentId,
-    match: [{ host: [host] }],
+    match: [{ host: [host], path: [prefix, `${prefix}/*`] }],
     handle: [
+      { handler: "rewrite", strip_path_prefix: prefix },
       {
         handler: "reverse_proxy",
         upstreams: [{ dial: `127.0.0.1:${hostPort}` }],
@@ -153,10 +164,11 @@ export async function addRoute(
     ],
   };
 
-  // Insert at the HEAD of the routes list. Operators put a terminal
-  // wildcard "unknown tenant" 404 route last — appending ours lands
-  // it below the wildcard and Caddy's first-match-wins evaluation
-  // never reaches it.
+  // Insert at the HEAD of the routes list. The Caddyfile-managed
+  // catch-all for `deployer.zynd.ai` (which forwards to the Next UI on
+  // :3000) lives further down the array; without prepending, Caddy's
+  // first-match-wins eval would route `/agent/<slug>/*` requests to
+  // Next instead of the container.
   //
   // We avoid POST .../routes/0 because its semantics differ across
   // Caddy versions — some treat the trailing index as "insert at",
@@ -203,8 +215,11 @@ async function prependRoute(route: CaddyRoute): Promise<void> {
       `Caddy addRoute failed: PATCH ${path} returned ${res.status} ${await res.text()}`
     );
   }
+  const m = route.match[0];
+  const host = m.host?.[0] ?? "*";
+  const pathDesc = m.path?.join(",") ?? "*";
   console.log(
-    `[caddy] prepended route id=${route["@id"]} host=${route.match[0].host[0]} (routes=${next.length})`
+    `[caddy] prepended route id=${route["@id"]} host=${host} path=${pathDesc} (routes=${next.length})`
   );
 }
 

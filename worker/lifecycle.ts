@@ -37,15 +37,25 @@ function workerRuntime(runtime: string) {
 
 /**
  * The URL the agent/service should advertise to the registry and the
- * URL the deployer's UI should link to. In production, that's the
- * Caddy-fronted `https://<slug>.<wildcardDomain>`. In local dev with
- * DEPLOYER_SKIP_CADDY=true, there's no reverse proxy and no TLS, so
- * we hand out the raw `http://localhost:<host-port>` instead — which
- * is actually reachable.
+ * URL the deployer's UI should link to. In production, Caddy fronts a
+ * single host (`<rootDomain>`) and routes by path prefix:
+ *   https://deployer.zynd.ai/agent/<slug>
+ *   https://deployer.zynd.ai/service/<slug>
+ *
+ * One LE cert covers everything — no wildcard, no per-tenant cert, no
+ * weekly rate-limit risk. The container itself still serves at root
+ * (`/`, `/health`, `/.well-known/agent-card.json`); Caddy strips the
+ * `/<entityType>/<slug>` prefix before forwarding. The SDK reads the
+ * advertised URL from `ZYND_ENTITY_URL` so all self-references the
+ * agent emits already include the prefix.
+ *
+ * In local dev with DEPLOYER_SKIP_CADDY=true, there's no reverse proxy
+ * and no TLS, so we hand out the raw `http://localhost:<host-port>`
+ * instead — which is actually reachable.
  */
-function buildHostUrl(slug: string, port: number): string {
+function buildHostUrl(slug: string, port: number, entityType: EntityType): string {
   if (config.skipCaddy) return `http://localhost:${port}`;
-  return `https://${slug}.${config.wildcardDomain}`;
+  return `https://${config.wildcardDomain}/${entityType}/${slug}`;
 }
 
 async function setStatus(id: string, status: DeploymentStatus, patch: Record<string, unknown> = {}) {
@@ -185,12 +195,12 @@ export async function drive(deploymentId: string): Promise<void> {
     // --- 6. register Caddy route -------------------------------------
 
     await setStatus(deploymentId, "registering_route");
-    await addRoute(deploymentId, dep.slug, port);
+    await addRoute(deploymentId, dep.slug, port, entityType);
     routeAdded = true;
 
     // --- 7. running --------------------------------------------------
 
-    const hostUrl = buildHostUrl(dep.slug, port);
+    const hostUrl = buildHostUrl(dep.slug, port, entityType);
     await prisma.deployment.update({
       where: { id: deploymentId },
       data: {
@@ -228,7 +238,7 @@ async function writeRenderedConfig(
   envRenderedPath: string,
   port: number
 ): Promise<void> {
-  const hostUrl = buildHostUrl(slug, port);
+  const hostUrl = buildHostUrl(slug, port, entityType);
   const keypairEnv =
     entityType === "service" ? "ZYND_SERVICE_KEYPAIR_PATH" : "ZYND_AGENT_KEYPAIR_PATH";
 
