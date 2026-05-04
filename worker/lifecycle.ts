@@ -252,6 +252,9 @@ async function writeRenderedConfig(
   // Deployer-owned values always win.
   merged.set(keypairEnv, "/app/keypair.json");
   merged.set("ZYND_REGISTRY_URL", config.registryUrl);
+  // Both names: ZYND_SERVER_PORT is the post-A2A name; ZYND_WEBHOOK_PORT
+  // kept for back-compat with pre-A2A SDK versions still in the wild.
+  merged.set("ZYND_SERVER_PORT", "5000");
   merged.set("ZYND_WEBHOOK_PORT", "5000");
   merged.set("ZYND_ENTITY_URL", hostUrl);
 
@@ -265,7 +268,14 @@ async function writeRenderedConfig(
   const configPath = join(workdir, configFile);
   try {
     const raw = JSON.parse(await readFile(configPath, "utf8"));
+    // Pin both the post-A2A field name (server_port) and the legacy
+    // alias (webhook_port). The SDK prefers server_port; without this
+    // a project zipped with `server_port: 5002` would bind inside the
+    // container to 5002 — but the container only exposes 5000 — and
+    // the deployer's healthcheck would time out.
+    raw.server_port = 5000;
     raw.webhook_port = 5000;
+    raw.server_host = "0.0.0.0";
     raw.registry_url = config.registryUrl;
     raw.keypair_path = "/app/keypair.json";
     await writeFile(configPath, JSON.stringify(raw, null, 2));
@@ -277,19 +287,30 @@ async function writeRenderedConfig(
 }
 
 async function backfillEntityId(deploymentId: string, port: number): Promise<void> {
-  const url = `http://127.0.0.1:${port}/.well-known/agent.json`;
-  let res: Response;
-  try {
-    res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-  } catch (e) {
-    console.log(
-      `[lifecycle] ${deploymentId} entityId backfill skipped: ${(e as Error).message}`
-    );
-    return;
+  // Try the post-A2A path first, fall back to the pre-A2A path so older
+  // images still work. The SDK serves agent-card.json now; agent.json is
+  // kept around in some old deployments but no longer required.
+  const candidates = [
+    `http://127.0.0.1:${port}/.well-known/agent-card.json`,
+    `http://127.0.0.1:${port}/.well-known/agent.json`,
+  ];
+  let res: Response | undefined;
+  let lastErr: string | undefined;
+  for (const url of candidates) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        res = r;
+        break;
+      }
+      lastErr = `HTTP ${r.status}`;
+    } catch (e) {
+      lastErr = (e as Error).message;
+    }
   }
-  if (!res.ok) {
+  if (!res) {
     console.log(
-      `[lifecycle] ${deploymentId} entityId backfill skipped: HTTP ${res.status}`
+      `[lifecycle] ${deploymentId} entityId backfill skipped: ${lastErr ?? "no card endpoint"}`
     );
     return;
   }
