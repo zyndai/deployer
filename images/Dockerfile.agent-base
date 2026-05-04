@@ -29,7 +29,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
-      "zyndai-agent[heartbeat]==0.5.0" \
+      "zyndai-agent[heartbeat]==0.5.1" \
       python-dotenv \
       requests \
       httpx \
