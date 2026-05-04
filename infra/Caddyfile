@@ -5,14 +5,25 @@
 #   2. Provide a named HTTPS server ("zynd") with an empty routes[] that
 #      the worker populates at runtime via the admin API.
 #
-# TLS for *.deployer.zynd.ai relies on Cloudflare DNS-01. Set
-# CLOUDFLARE_API_TOKEN in the systemd EnvironmentFile before starting
-# caddy.service.
+# TLS strategy: per-tenant on-demand TLS via HTTP-01.
+#
+# We don't use DNS-01 because the domain is on Namecheap (no Caddy DNS
+# module + no public API for free tier). Instead Caddy issues a fresh
+# Let's Encrypt cert for each <slug>.deployer.zynd.ai the first time
+# someone hits it. The "ask" hook below points at the Next API which
+# returns 200 only for slugs that actually exist as deployments — that
+# stops randoms from burning our LE rate limit on wildcard typos.
+#
+# Requirements:
+#   - DNS: A record  *.deployer.zynd.ai -> host IP   (already in place)
+#   - Firewall: port 80 (HTTP-01) and port 443 must be reachable
+#   - Caddy: stock build is fine; no DNS plugins needed
 
 {
     admin 127.0.0.1:2019
-    # Dynamic routes get appended to apps.http.servers.zynd.routes via
-    # POST /config/apps/http/servers/zynd/routes/...
+    on_demand_tls {
+        ask http://127.0.0.1:3000/api/caddy/ask
+    }
     servers {
         trusted_proxies static 127.0.0.1/32
     }
@@ -27,14 +38,13 @@ deployer.zynd.ai {
 
 # --- Wildcard tenant server ----------------------------------------------
 #
-# The magic here is the @id handle: Caddy only attaches IDs to matchers/
-# routes that carry them. We seed an empty placeholder route so the
-# `zynd` server exists before the worker starts POSTing to it.
+# Empty placeholder route so the `zynd` server exists before the worker
+# starts POSTing. The worker prepends per-deployment routes via the
+# admin API; this block stays as a 404 fallback.
 
 *.deployer.zynd.ai {
     tls {
-        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+        on_demand
     }
-    # No default handler — unknown slugs 404 until the worker adds them.
     respond 404
 }
