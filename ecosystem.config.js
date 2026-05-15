@@ -1,0 +1,32 @@
+ module.exports = {
+    apps: [
+      {                                                                                                                
+        name: "zynd-deployer-web",
+        cwd: "/home/ubuntu/deployer",                                                                                  
+        script: "node",
+        args: "--env-file=.env node_modules/next/dist/bin/next start",
+        instances: 1,                                                                                                  
+        exec_mode: "fork",
+        max_memory_restart: "1G",                                                                                      
+        autorestart: true,
+        out_file: "/home/ubuntu/deployer/logs/web.out.log",
+        error_file: "/home/ubuntu/deployer/logs/web.err.log",                                                          
+        merge_logs: true,
+        time: true,                                                                                                    
+      },                                                    
+      {                                                                                                                
+        name: "zynd-deployer-worker",                       
+        cwd: "/home/ubuntu/deployer",
+        script: "npx",
+        args: "tsx --env-file=.env worker/main.ts",
+        instances: 1,                                                                                                  
+        exec_mode: "fork",
+        max_memory_restart: "1G",                                                                                      
+        autorestart: true,                                  
+        out_file: "/home/ubuntu/deployer/logs/worker.out.log",
+        error_file: "/home/ubuntu/deployer/logs/worker.err.log",                                                       
+        merge_logs: true,
+        time: true,                                                                                                    
+      },                                                    
+    ],                                                                                                                 
+  };       

@@ -1,0 +1,14 @@
+                                                          
+  FROM zynd-deployer/service-base:latest                                                                                                                                                                                                                                                              
+                                                                                                                                                                                                                                                                                                      
+  LABEL zynd.runtime="python" \
+        zynd.kind="service" \                                                                                                                                                                                                                                                                         
+        zynd.flavor="playwright" \                          
+        zynd.display="Python Service + Playwright" \
+        zynd.description="Chromium + Playwright SDK preinstalled"
+                                                                                                                                                                                                                                                                                                      
+  USER root
+                                                                                                                                                                                                                                                                                                      
+  RUN pip install --no-cache-dir playwright \                                                                                                                                                                                                                                                         
+   && playwright install --with-deps chromium \
+   && rm -rf /var/lib/apt/lists/* /root/.cache/pip   
