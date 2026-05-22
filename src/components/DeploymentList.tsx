@@ -20,6 +20,7 @@ interface DeploymentRow {
   createdAt: string;
 }
 
+type TabKey = "active" | "issues" | "all";
 type FilterKey = "all" | "running" | "starting" | "crashed" | "failed" | "stopped";
 
 const STARTING_STATUSES: DeploymentStatus[] = [
@@ -32,6 +33,17 @@ const STARTING_STATUSES: DeploymentStatus[] = [
   "health_checking",
   "registering_route",
 ];
+
+function matchesTab(row: DeploymentRow, t: TabKey): boolean {
+  switch (t) {
+    case "active":
+      return row.status === "running" || row.status === "unhealthy" || STARTING_STATUSES.includes(row.status);
+    case "issues":
+      return row.status === "crashed" || row.status === "failed" || row.status === "stopped";
+    case "all":
+      return true;
+  }
+}
 
 function matchesFilter(row: DeploymentRow, f: FilterKey): boolean {
   switch (f) {
@@ -81,6 +93,7 @@ function countRows(rows: DeploymentRow[]): Counts {
 export function DeploymentList() {
   const [rows, setRows] = useState<DeploymentRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<TabKey>("active");
   const [filter, setFilter] = useState<FilterKey>("all");
 
   useEffect(() => {
@@ -104,9 +117,14 @@ export function DeploymentList() {
   }, []);
 
   const counts = useMemo(() => (rows ? countRows(rows) : null), [rows]);
+  const tabRows = useMemo(
+    () => (rows ? rows.filter((r) => matchesTab(r, tab)) : null),
+    [rows, tab]
+  );
+  const tabCounts = useMemo(() => (tabRows ? countRows(tabRows) : null), [tabRows]);
   const filtered = useMemo(
-    () => (rows ? rows.filter((r) => matchesFilter(r, filter)) : null),
-    [rows, filter]
+    () => (tabRows ? tabRows.filter((r) => matchesFilter(r, filter)) : null),
+    [tabRows, filter]
   );
 
   if (err) {
@@ -116,13 +134,23 @@ export function DeploymentList() {
       </div>
     );
   }
-  if (!rows || !counts || !filtered) {
+  if (!rows || !counts || !tabCounts || !filtered) {
     return <div className="text-sm text-white/50">Loading…</div>;
   }
 
+  const activeCount = counts.running + counts.starting;
+  const issuesCount = counts.crashed + counts.failed + counts.stopped;
+
   return (
     <div className="space-y-4">
-      <StatsBar counts={counts} filter={filter} setFilter={setFilter} />
+      <TabBar
+        tab={tab}
+        activeCount={activeCount}
+        issuesCount={issuesCount}
+        totalCount={counts.total}
+        onTabChange={(t) => { setTab(t); setFilter("all"); }}
+      />
+      <StatsBar counts={tabCounts} filter={filter} setFilter={setFilter} tab={tab} />
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-white/15 p-10 text-center">
@@ -133,6 +161,10 @@ export function DeploymentList() {
           >
             Deploy your first agent
           </Link>
+        </div>
+      ) : tabRows!.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-white/15 p-8 text-center text-sm text-white/50">
+          No deployments in this tab.
         </div>
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-white/15 p-8 text-center text-sm text-white/50">
@@ -145,51 +177,71 @@ export function DeploymentList() {
   );
 }
 
+interface TabBarProps {
+  tab: TabKey;
+  activeCount: number;
+  issuesCount: number;
+  totalCount: number;
+  onTabChange: (t: TabKey) => void;
+}
+
+function TabBar({ tab, activeCount, issuesCount, totalCount, onTabChange }: TabBarProps) {
+  const tabs: Array<{ key: TabKey; label: string; count: number }> = [
+    { key: "active", label: "Active", count: activeCount },
+    { key: "issues", label: "Issues", count: issuesCount },
+    { key: "all", label: "All", count: totalCount },
+  ];
+  return (
+    <div className="flex gap-1 rounded-lg border border-white/10 bg-white/[0.02] p-1">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => onTabChange(t.key)}
+          className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition ${
+            tab === t.key
+              ? "bg-zynd-purple text-white"
+              : "text-white/60 hover:bg-white/5 hover:text-white"
+          }`}
+        >
+          {t.label}
+          <span
+            className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+              tab === t.key ? "bg-white/20 text-white" : "bg-white/10 text-white/50"
+            }`}
+          >
+            {t.count}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface StatsBarProps {
   counts: Counts;
   filter: FilterKey;
   setFilter: (f: FilterKey) => void;
+  tab: TabKey;
 }
 
-function StatsBar({ counts, filter, setFilter }: StatsBarProps) {
-  const cards: Array<{
+function StatsBar({ counts, filter, setFilter, tab }: StatsBarProps) {
+  const allCards: Array<{
     key: FilterKey;
     label: string;
     value: number;
     accent: string;
+    tabs: TabKey[];
   }> = [
-    { key: "all", label: "Total", value: counts.total, accent: "text-white" },
-    {
-      key: "running",
-      label: "Running",
-      value: counts.running,
-      accent: "text-emerald-300",
-    },
-    {
-      key: "starting",
-      label: "Starting",
-      value: counts.starting,
-      accent: "text-amber-200",
-    },
-    {
-      key: "crashed",
-      label: "Crashed",
-      value: counts.crashed,
-      accent: "text-rose-200",
-    },
-    {
-      key: "failed",
-      label: "Failed",
-      value: counts.failed,
-      accent: "text-rose-300",
-    },
-    {
-      key: "stopped",
-      label: "Stopped",
-      value: counts.stopped,
-      accent: "text-white/60",
-    },
+    { key: "all", label: "Total", value: counts.total, accent: "text-white", tabs: ["active", "issues", "all"] },
+    { key: "running", label: "Running", value: counts.running, accent: "text-emerald-300", tabs: ["active", "all"] },
+    { key: "starting", label: "Starting", value: counts.starting, accent: "text-amber-200", tabs: ["active", "all"] },
+    { key: "crashed", label: "Crashed", value: counts.crashed, accent: "text-rose-200", tabs: ["issues", "all"] },
+    { key: "failed", label: "Failed", value: counts.failed, accent: "text-rose-300", tabs: ["issues", "all"] },
+    { key: "stopped", label: "Stopped", value: counts.stopped, accent: "text-white/60", tabs: ["issues", "all"] },
   ];
+
+  const cards = allCards.filter((c) => c.tabs.includes(tab));
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
